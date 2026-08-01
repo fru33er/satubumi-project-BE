@@ -52,5 +52,6 @@ class RapidFSResult(BaseModel):
     component_scores: ComponentScores
     recommendations: List[str]
     
-    # Metadata / Geometry
+    # Tahap 2: 9 Layer Spasial Overlay & Geometry
+    spatial_overlay_layers: Optional[Dict[str, Any]] = None
     geometry: Optional[Dict[str, Any]] = None

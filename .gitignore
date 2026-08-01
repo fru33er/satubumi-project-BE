@@ -26,6 +26,10 @@ ENV/
 
 # Environment Variables & Secrets
 .env
+*-9e94dc4d0800.json
+post-app-*.json
+*.json
+!app/**/*.json
 
 # SQLite Database & Uploads
 *.db

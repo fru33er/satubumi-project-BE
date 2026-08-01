@@ -23,11 +23,13 @@ def calculate_rapid_fs(input_data: RapidFSInput, spatial_override: Dict[str, Any
     eco_config = ECOSYSTEM_DEFAULTS.get(eco_type, ECOSYSTEM_DEFAULTS["hutan_tropis"])
     cf = eco_config["cf"]
     er = eco_config["er"]
+    spatial_layers = None
     
     # Override jika ada statistik riil dari ekstraksi GEE
     if spatial_override:
         if "cf" in spatial_override: cf = spatial_override["cf"]
         if "er" in spatial_override: er = spatial_override["er"]
+        if "spatial_overlay_layers" in spatial_override: spatial_layers = spatial_override["spatial_overlay_layers"]
     
     # Tahap 3: Estimasi Karbon
     agb = area * cf                      # Above-Ground Biomass (ton)
@@ -128,6 +130,7 @@ def calculate_rapid_fs(input_data: RapidFSInput, spatial_override: Dict[str, Any
         feasibility_category=category,
         component_scores=comp_scores,
         recommendations=recommendations,
+        spatial_overlay_layers=spatial_layers,
         geometry=input_data.polygon_geojson
     )
 
