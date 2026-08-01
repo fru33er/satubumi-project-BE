@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: satubumi_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://satubumi:satubumipassword@db:5432/satubumi_db
+      - REDIS_URL=redis://redis:6379/0
+      - USE_MOCK_GEE=True
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: satubumi_postgis_db
+    restart: always
+    environment:
+      POSTGRES_USER: satubumi
+      POSTGRES_PASSWORD: satubumipassword
+      POSTGRES_DB: satubumi_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: satubumi_redis_cache
+    restart: always
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:

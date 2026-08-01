@@ -1,0 +1,29 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic[email]>=2.6.0
+email-validator>=2.1.0
+pydantic-settings>=2.2.0
+
+# Database
+sqlalchemy>=2.0.28
+alembic>=1.13.1
+psycopg2-binary>=2.9.9
+
+# Auth & Security
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.9
+
+# Pure Python GIS Parsing
+earthengine-api>=0.1.390
+shapely>=2.0.3
+pyproj>=3.6.1
+pyshp>=2.3.1
+
+# Reporting & Utilities
+jinja2>=3.1.3
+redis>=5.0.3
+slowapi>=0.1.9
+
+# Testing
+httpx>=0.27.0
