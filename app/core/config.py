@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     GEE_PRIVATE_KEY_FILE_PATH: str = ""
     USE_MOCK_GEE: bool = True
 
+    # Upload Gambar Artikel
+    UPLOAD_DIR: str = "static/uploads"          # Relatif terhadap root proyek
+    MAX_UPLOAD_SIZE_MB: int = 5                 # Ukuran maksimal file gambar (MB)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

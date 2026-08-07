@@ -38,6 +38,11 @@ satubumi.db
 uploaded_*.zip
 test_shapefile.zip
 
+# Upload gambar artikel — abaikan file gambar, tapi track folder-nya
+static/uploads/*
+!static/uploads/.gitkeep
+
+
 # IDE & Editors
 .vscode/
 .idea/

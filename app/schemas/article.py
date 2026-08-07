@@ -10,6 +10,7 @@ class ArticleBase(BaseModel):
     content: str
     status: Optional[str] = "published"
     tags: Optional[str] = None
+    image_url: Optional[str] = None  # URL gambar (diisi otomatis oleh endpoint upload)
 
 class ArticleCreate(ArticleBase):
     pass
@@ -22,6 +23,7 @@ class ArticleUpdate(BaseModel):
     content: Optional[str] = None
     status: Optional[str] = None
     tags: Optional[str] = None
+    image_url: Optional[str] = None  # Bisa di-set manual jika perlu
 
 class ArticleResponse(ArticleBase):
     id: int

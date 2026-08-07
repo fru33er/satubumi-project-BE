@@ -1,5 +1,7 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.models.article import Article
@@ -11,6 +13,9 @@ from app.api.v1.contact import router as contact_router
 from app.api.v1.articles import router as articles_router
 from app.api.v1.users import router as users_router
 
+# Buat folder upload jika belum ada
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
 # Inisialisasi tabel DB saat startup (jika belum ada)
 Base.metadata.create_all(bind=engine)
 
@@ -21,6 +26,10 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# Serve static files (gambar upload artikel)
+# Akses via: GET /static/uploads/{filename}
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Setup CORS Middleware
 app.add_middleware(
