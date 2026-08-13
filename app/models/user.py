@@ -9,6 +9,7 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=True)
+    phone_number = Column(String(50), nullable=True)
     role = Column(String(50), default="client")  # admin, client, analyst
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)

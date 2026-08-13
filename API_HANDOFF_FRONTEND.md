@@ -100,7 +100,7 @@ Server akan aktif di `http://localhost:8000`. Dokumentasi interaktif Swagger dap
 
 ### 2. Autentikasi Pengguna (JWT Auth)
 
-* **Register:** `POST /api/v1/auth/register` (Body: `email`, `password`, `full_name`)
+* **Register:** `POST /api/v1/auth/register` (Body: `email`, `password`, `full_name`, `phone_number`)
 * **Login:** `POST /api/v1/auth/login` (Body: `email`, `password`)
   * *Mengembalikan `{ "access_token": "eyJhbG..." }`*
 * **Get Profile:** `GET /api/v1/auth/me`

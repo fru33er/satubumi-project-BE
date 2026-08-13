@@ -29,6 +29,7 @@ def create_user_by_admin(
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
         full_name=user_in.full_name,
+        phone_number=user_in.phone_number,
         role=user_in.role or "admin"
     )
     db.add(new_user)
