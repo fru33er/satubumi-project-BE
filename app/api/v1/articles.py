@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.models.user import User
 from app.models.article import Article
 from app.schemas.article import ArticleCreate, ArticleUpdate, ArticleResponse
+from app.services import translation_service
 
 router = APIRouter(prefix="/articles", tags=["Articles & Content (About & Services)"])
 
@@ -18,19 +19,79 @@ ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 @router.get("/", response_model=List[ArticleResponse])
-def get_articles(category: Optional[str] = Query(None, description="Filter: 'about' or 'services'"), db: Session = Depends(get_db)):
-    """Ambil semua artikel (Publik). Bisa difilter ?category=about atau ?category=services"""
+async def get_articles(
+    category: Optional[str] = Query(None, description="Filter: 'about' or 'services'"),
+    lang: str = Query("id", description="Bahasa konten: 'id' (Indonesia, default) atau 'en' (English)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Ambil semua artikel (Publik).
+    - Filter opsional: `?category=about` atau `?category=services`
+    - Bahasa: `?lang=id` (default, Indonesia) atau `?lang=en` (English — dynamic translation)
+    """
     query = db.query(Article)
     if category:
         query = query.filter(Article.category == category)
-    return query.order_by(Article.created_at.desc()).all()
+    articles = query.order_by(Article.created_at.desc()).all()
+
+    if lang == "en":
+        translated = []
+        for art in articles:
+            art_dict = await translation_service.translate_article(
+                {
+                    "id": art.id,
+                    "category": art.category,
+                    "title": art.title,
+                    "slug": art.slug,
+                    "author": art.author,
+                    "content": art.content,
+                    "status": art.status,
+                    "tags": art.tags,
+                    "image_url": art.image_url,
+                    "created_at": art.created_at,
+                    "updated_at": art.updated_at,
+                },
+                target_lang="en"
+            )
+            translated.append(art_dict)
+        return translated
+
+    return articles
+
 
 @router.get("/{article_id}", response_model=ArticleResponse)
-def get_article(article_id: int, db: Session = Depends(get_db)):
-    """Ambil detail artikel berdasarkan ID"""
+async def get_article(
+    article_id: int,
+    lang: str = Query("id", description="Bahasa konten: 'id' (Indonesia, default) atau 'en' (English)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Ambil detail artikel berdasarkan ID.
+    - Bahasa: `?lang=id` (default) atau `?lang=en` (dynamic translation)
+    """
     art = db.query(Article).filter(Article.id == article_id).first()
     if not art:
         raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
+
+    if lang == "en":
+        art_dict = await translation_service.translate_article(
+            {
+                "id": art.id,
+                "category": art.category,
+                "title": art.title,
+                "slug": art.slug,
+                "author": art.author,
+                "content": art.content,
+                "status": art.status,
+                "tags": art.tags,
+                "image_url": art.image_url,
+                "created_at": art.created_at,
+                "updated_at": art.updated_at,
+            },
+            target_lang="en"
+        )
+        return art_dict
+
     return art
 
 @router.post("/", response_model=ArticleResponse, status_code=status.HTTP_201_CREATED)

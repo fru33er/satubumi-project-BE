@@ -7,6 +7,12 @@ class Assessment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Data kontak submitter (untuk user guest maupun logged-in)
+    submitter_name = Column(String(255), nullable=True)
+    submitter_phone = Column(String(50), nullable=True)
+    submitter_email = Column(String(255), nullable=True)
+
     location_name = Column(String(255), nullable=False)
     area_ha = Column(Float, nullable=False)
     ecosystem_type = Column(String(100), nullable=False)

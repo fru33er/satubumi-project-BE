@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "static/uploads"          # Relatif terhadap root proyek
     MAX_UPLOAD_SIZE_MB: int = 5                 # Ukuran maksimal file gambar (MB)
 
+    # MyMemory Translation API (Gratis, Tanpa API Key)
+    # Opsional: isi email untuk meningkatkan limit dari 5.000 → 10.000 kata/hari
+    MYMEMORY_EMAIL: str = ""               # Contoh: "admin@satubumi.org"
+    DEFAULT_LANGUAGE: str = "id"           # Bahasa default konten: 'id' (Indonesia)
+
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

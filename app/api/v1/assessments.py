@@ -4,22 +4,44 @@ from typing import List, Optional
 from app.core.database import get_db
 from app.models.assessment import Assessment
 from app.models.user import User
-from app.schemas.rapid_fs import RapidFSResult
+from app.schemas.assessment import AssessmentSubmitRequest, AssessmentResponse
 from app.api.v1.auth import get_current_user
 
 router = APIRouter(prefix="/assessments", tags=["Assessment History"])
 
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 def save_assessment(
-    result: RapidFSResult,
+    body: AssessmentSubmitRequest,
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
     """
-    Menyimpan hasil kalkulasi Rapid-FS ke database histori proyek user.
+    Menyimpan hasil kalkulasi Rapid-FS ke database histori assessment.
+
+    - **submitter_name**: Nama lengkap user (opsional jika sudah login)
+    - **submitter_phone**: Nomor telepon user
+    - **submitter_email**: Email user
+    - **rapid_fs_result**: Hasil lengkap dari endpoint `/rapid-fs/calculate`
+
+    Jika user sudah login, `user_id` otomatis diisi. Data kontak tetap bisa dioverride manual.
     """
+    result = body.rapid_fs_result
+
+    # Jika user login & tidak mengisi submitter_name/email, fallback ke profil user
+    submitter_name = body.submitter_name
+    submitter_email = body.submitter_email
+    if current_user:
+        if not submitter_name and current_user.full_name:
+            submitter_name = current_user.full_name
+        if not submitter_email and current_user.email:
+            submitter_email = current_user.email
+
     new_assessment = Assessment(
         user_id=current_user.id if current_user else None,
+        submitter_name=submitter_name,
+        submitter_phone=body.submitter_phone,
+        submitter_email=submitter_email,
         location_name=result.location_name,
         area_ha=result.area_ha,
         ecosystem_type=result.ecosystem_type,
@@ -42,28 +64,47 @@ def save_assessment(
     db.add(new_assessment)
     db.commit()
     db.refresh(new_assessment)
-    return {"id": new_assessment.id, "message": "Hasil assessment berhasil disimpan."}
+    return {
+        "id": new_assessment.id,
+        "message": "Hasil assessment berhasil disimpan.",
+        "submitter_name": new_assessment.submitter_name,
+        "submitter_email": new_assessment.submitter_email
+    }
 
-@router.get("")
+
+@router.get("", response_model=List[AssessmentResponse])
 def list_assessments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Mendapatkan daftar histori assessment milik user terautentikasi.
+    Mendapatkan daftar histori assessment.
+
+    - **Admin**: Melihat semua assessment dari semua user beserta data kontak submitter.
+    - **User biasa**: Hanya melihat assessment miliknya sendiri.
     """
     if current_user.role == "admin":
         assessments = db.query(Assessment).order_by(Assessment.created_at.desc()).all()
     else:
-        assessments = db.query(Assessment).filter(Assessment.user_id == current_user.id).order_by(Assessment.created_at.desc()).all()
+        assessments = (
+            db.query(Assessment)
+            .filter(Assessment.user_id == current_user.id)
+            .order_by(Assessment.created_at.desc())
+            .all()
+        )
     return assessments
 
-@router.get("/{assessment_id}")
+
+@router.get("/{assessment_id}", response_model=AssessmentResponse)
 def get_assessment(
     assessment_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Mendapatkan detail satu assessment berdasarkan ID.
+    Admin bisa akses semua; user biasa hanya miliknya.
+    """
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment tidak ditemukan.")
@@ -71,18 +112,23 @@ def get_assessment(
         raise HTTPException(status_code=403, detail="Akses ditolak.")
     return assessment
 
-@router.delete("/{assessment_id}")
+
+@router.delete("/{assessment_id}", status_code=status.HTTP_200_OK)
 def delete_assessment(
     assessment_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Menghapus assessment berdasarkan ID.
+    Admin bisa hapus semua; user biasa hanya miliknya.
+    """
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment tidak ditemukan.")
     if current_user.role != "admin" and assessment.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Akses ditolak.")
-        
+
     db.delete(assessment)
     db.commit()
     return {"message": "Assessment berhasil dihapus."}
