@@ -83,7 +83,7 @@ def list_assessments(
     - **Admin**: Melihat semua assessment dari semua user beserta data kontak submitter.
     - **User biasa**: Hanya melihat assessment miliknya sendiri.
     """
-    if current_user.role == "admin":
+    if current_user.role in ["admin", "super_admin"]:
         assessments = db.query(Assessment).order_by(Assessment.created_at.desc()).all()
     else:
         assessments = (
@@ -108,7 +108,7 @@ def get_assessment(
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment tidak ditemukan.")
-    if current_user.role != "admin" and assessment.user_id != current_user.id:
+    if current_user.role not in ["admin", "super_admin"] and assessment.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Akses ditolak.")
     return assessment
 
@@ -126,7 +126,7 @@ def delete_assessment(
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment tidak ditemukan.")
-    if current_user.role != "admin" and assessment.user_id != current_user.id:
+    if current_user.role not in ["admin", "super_admin"] and assessment.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Akses ditolak.")
 
     db.delete(assessment)

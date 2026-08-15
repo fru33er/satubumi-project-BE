@@ -37,6 +37,9 @@ post-app-*.json
 satubumi.db
 uploaded_*.zip
 test_shapefile.zip
+*.zip
+*.docx
+extracted_profil.txt
 
 # Upload gambar artikel — abaikan file gambar, tapi track folder-nya
 static/uploads/*
