@@ -1,152 +1,256 @@
 import os
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Request
-from sqlalchemy.orm import Session
 from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Request
+from sqlalchemy import func, desc
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
 from app.core.dependencies import require_admin
 from app.core.config import settings
 from app.models.user import User
 from app.models.article import Article
-from app.schemas.article import ArticleCreate, ArticleUpdate, ArticleResponse
-from app.services import translation_service
+from app.schemas.article import (
+    ArticleCreate,
+    ArticleUpdate,
+    ArticleResponse,
+    TopAuthorItem,
+    TopicItem,
+)
 
-router = APIRouter(prefix="/articles", tags=["Articles & Content (About & Services)"])
+router = APIRouter(prefix="/articles", tags=["Articles & Content"])
 
-# Format gambar yang diizinkan
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
+def serialize_article(art: Article, lang: str = "id") -> dict:
+    """
+    lang=id → title/content Indonesia
+    lang=en → title_en/content_en (fallback ke ID jika kosong)
+    """
+    use_en = lang == "en"
+    return {
+        "id": art.id,
+        "category": art.category,
+        "title": (art.title_en if use_en and art.title_en else art.title),
+        "title_en": getattr(art, "title_en", None),
+        "slug": art.slug,
+        "author": art.author or "Satubumi Team",
+        "content": (art.content_en if use_en and art.content_en else art.content),
+        "content_en": getattr(art, "content_en", None),
+        "status": art.status,
+        "tags": art.tags,
+        "image_url": art.image_url,
+        "topic": getattr(art, "topic", None),
+        "is_featured": bool(getattr(art, "is_featured", False)),
+        "view_count": int(getattr(art, "view_count", 0) or 0),
+        "created_at": art.created_at,
+        "updated_at": art.updated_at,
+    }
+
+
+def _delete_image_file(image_url: str) -> None:
+    try:
+        filename = image_url.split("/uploads/")[-1]
+        file_path = os.path.join(settings.UPLOAD_DIR, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+    except Exception:
+        pass
+
+
+# ──────────────────────────────────────────────
+# LIST & FILTER (publik)
+# ──────────────────────────────────────────────
+
 @router.get("/", response_model=List[ArticleResponse])
 async def get_articles(
-    category: Optional[str] = Query(None, description="Filter: 'about' or 'services'"),
-    lang: str = Query("id", description="Bahasa konten: 'id' (Indonesia, default) atau 'en' (English)"),
-    db: Session = Depends(get_db)
+    category: Optional[str] = Query(None, description="about | services | insight | home | ..."),
+    topic: Optional[str] = Query(None, description="carbon | esg | policy | nature | other"),
+    is_featured: Optional[bool] = Query(None),
+    author: Optional[str] = Query(None),
+    lang: str = Query("id", description="id | en"),
+    db: Session = Depends(get_db),
 ):
-    """
-    Ambil semua artikel (Publik).
-    - Filter opsional: `?category=about` atau `?category=services`
-    - Bahasa: `?lang=id` (default, Indonesia) atau `?lang=en` (English — dynamic translation)
-    """
     query = db.query(Article)
     if category:
         query = query.filter(Article.category == category)
+    if topic:
+        query = query.filter(Article.topic == topic)
+    if is_featured is not None:
+        query = query.filter(Article.is_featured == is_featured)
+    if author:
+        query = query.filter(Article.author == author)
+
     articles = query.order_by(Article.created_at.desc()).all()
+    return [serialize_article(art, lang) for art in articles]
 
-    if lang == "en":
-        translated = []
-        for art in articles:
-            art_dict = await translation_service.translate_article(
-                {
-                    "id": art.id,
-                    "category": art.category,
-                    "title": art.title,
-                    "slug": art.slug,
-                    "author": art.author,
-                    "content": art.content,
-                    "status": art.status,
-                    "tags": art.tags,
-                    "image_url": art.image_url,
-                    "created_at": art.created_at,
-                    "updated_at": art.updated_at,
-                },
-                target_lang="en"
-            )
-            translated.append(art_dict)
-        return translated
 
-    return articles
+# ──────────────────────────────────────────────
+# INSIGHTS STATS (HARUS di atas /{article_id})
+# ──────────────────────────────────────────────
 
+@router.get("/insights/top", response_model=List[ArticleResponse])
+def get_top_insights(
+    limit: int = Query(5, ge=1, le=20),
+    by: str = Query("featured", description="featured | views | recent"),
+    lang: str = Query("id"),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Article).filter(
+        Article.category == "insight",
+        Article.status == "published",
+    )
+    if by == "featured":
+        q = q.filter(Article.is_featured == True).order_by(Article.updated_at.desc())
+    elif by == "views":
+        q = q.order_by(desc(Article.view_count), Article.created_at.desc())
+    else:
+        q = q.order_by(Article.created_at.desc())
+
+    articles = q.limit(limit).all()
+    return [serialize_article(art, lang) for art in articles]
+
+
+@router.get("/insights/top-authors", response_model=List[TopAuthorItem])
+def get_top_authors(
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(Article.author, func.count(Article.id).label("count"))
+        .filter(
+            Article.category == "insight",
+            Article.status == "published",
+        )
+        .group_by(Article.author)
+        .order_by(desc("count"))
+        .limit(limit)
+        .all()
+    )
+    return [
+        TopAuthorItem(author=(r.author or "Satubumi Team"), count=r.count)
+        for r in rows
+    ]
+
+
+@router.get("/insights/topics", response_model=List[TopicItem])
+def get_insight_topics(db: Session = Depends(get_db)):
+    rows = (
+        db.query(Article.topic, func.count(Article.id).label("count"))
+        .filter(
+            Article.category == "insight",
+            Article.status == "published",
+            Article.topic.isnot(None),
+            Article.topic != "",
+        )
+        .group_by(Article.topic)
+        .order_by(desc("count"))
+        .all()
+    )
+    return [TopicItem(topic=r.topic, count=r.count) for r in rows]
+
+
+@router.post("/{article_id}/view", response_model=ArticleResponse)
+def increment_article_view(
+    article_id: int,
+    lang: str = Query("id"),
+    db: Session = Depends(get_db),
+):
+    art = db.query(Article).filter(Article.id == article_id).first()
+    if not art:
+        raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
+    if art.category == "insight" and art.status == "published":
+        art.view_count = int(getattr(art, "view_count", 0) or 0) + 1
+        db.commit()
+        db.refresh(art)
+    return serialize_article(art, lang)
+
+
+# ──────────────────────────────────────────────
+# DETAIL BY ID
+# ──────────────────────────────────────────────
 
 @router.get("/{article_id}", response_model=ArticleResponse)
 async def get_article(
     article_id: int,
-    lang: str = Query("id", description="Bahasa konten: 'id' (Indonesia, default) atau 'en' (English)"),
-    db: Session = Depends(get_db)
+    lang: str = Query("id", description="id | en"),
+    db: Session = Depends(get_db),
 ):
-    """
-    Ambil detail artikel berdasarkan ID.
-    - Bahasa: `?lang=id` (default) atau `?lang=en` (dynamic translation)
-    """
     art = db.query(Article).filter(Article.id == article_id).first()
     if not art:
         raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
+    return serialize_article(art, lang)
 
-    if lang == "en":
-        art_dict = await translation_service.translate_article(
-            {
-                "id": art.id,
-                "category": art.category,
-                "title": art.title,
-                "slug": art.slug,
-                "author": art.author,
-                "content": art.content,
-                "status": art.status,
-                "tags": art.tags,
-                "image_url": art.image_url,
-                "created_at": art.created_at,
-                "updated_at": art.updated_at,
-            },
-            target_lang="en"
-        )
-        return art_dict
 
-    return art
+# ──────────────────────────────────────────────
+# CRUD (admin)
+# ──────────────────────────────────────────────
 
 @router.post("/", response_model=ArticleResponse, status_code=status.HTTP_201_CREATED)
 def create_article(
-    article_in: ArticleCreate, 
-    db: Session = Depends(get_db), 
-    admin: User = Depends(require_admin)
+    article_in: ArticleCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
 ):
-    """[Admin & Super Admin] Buat artikel baru untuk About atau Services"""
-    new_art = Article(**article_in.dict())
+    data = article_in.dict()
+    if getattr(admin, "full_name", None):
+        data["author"] = admin.full_name
+    data.setdefault("is_featured", False)
+    data.setdefault("view_count", 0)
+
+    allowed = {c.name for c in Article.__table__.columns}
+    payload = {k: v for k, v in data.items() if k in allowed}
+
+    new_art = Article(**payload)
     db.add(new_art)
     db.commit()
     db.refresh(new_art)
-    return new_art
+    return serialize_article(new_art, "id")
+
 
 @router.put("/{article_id}", response_model=ArticleResponse)
 def update_article(
-    article_id: int, 
-    article_in: ArticleUpdate, 
-    db: Session = Depends(get_db), 
-    admin: User = Depends(require_admin)
+    article_id: int,
+    article_in: ArticleUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
 ):
-    """[Admin & Super Admin] Update artikel"""
     art = db.query(Article).filter(Article.id == article_id).first()
     if not art:
         raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
-    
+
+    allowed = {c.name for c in Article.__table__.columns}
     for key, value in article_in.dict(exclude_unset=True).items():
-        setattr(art, key, value)
-    
+        if key in allowed:
+            setattr(art, key, value)
+
     db.commit()
     db.refresh(art)
-    return art
+    return serialize_article(art, "id")
+
 
 @router.delete("/{article_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_article(
-    article_id: int, 
-    db: Session = Depends(get_db), 
-    admin: User = Depends(require_admin)
+    article_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
 ):
-    """[Admin & Super Admin] Hapus artikel"""
     art = db.query(Article).filter(Article.id == article_id).first()
     if not art:
         raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
-    
-    # Hapus file gambar dari disk jika ada
+
     if art.image_url:
         _delete_image_file(art.image_url)
-    
+
     db.delete(art)
     db.commit()
 
 
 # ──────────────────────────────────────────────
-# Endpoint Upload & Hapus Gambar Artikel
+# IMAGE
 # ──────────────────────────────────────────────
 
 @router.post(
@@ -157,63 +261,44 @@ def delete_article(
 async def upload_article_image(
     article_id: int,
     request: Request,
-    file: UploadFile = File(..., description="File gambar (jpg, jpeg, png, webp). Maks 5 MB."),
+    file: UploadFile = File(..., description="jpg, jpeg, png, webp. Maks 5 MB."),
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """
-    [Admin & Super Admin] Upload atau ganti gambar untuk artikel tertentu.
-
-    - **Format yang didukung**: `jpg`, `jpeg`, `png`, `webp`
-    - **Ukuran maksimal**: 5 MB
-    - Gambar lama otomatis **dihapus** dari server saat diganti.
-    - URL gambar tersimpan di field `image_url` pada response.
-    - Gambar bisa diakses publik via: `GET /static/uploads/{filename}`
-    """
     art = db.query(Article).filter(Article.id == article_id).first()
     if not art:
         raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
 
-    # --- Validasi tipe file ---
     content_type = file.content_type or ""
     ext = os.path.splitext(file.filename or "")[1].lower()
 
     if content_type not in ALLOWED_IMAGE_TYPES or ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"Format file tidak didukung. Gunakan: jpg, jpeg, png, atau webp."
+            detail="Format file tidak didukung. Gunakan: jpg, jpeg, png, atau webp.",
         )
 
-    # --- Baca konten & validasi ukuran ---
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
     contents = await file.read()
     if len(contents) > max_bytes:
         raise HTTPException(
             status_code=400,
-            detail=f"Ukuran file melebihi batas maksimal {settings.MAX_UPLOAD_SIZE_MB} MB."
+            detail=f"Ukuran file melebihi batas maksimal {settings.MAX_UPLOAD_SIZE_MB} MB.",
         )
 
-    # --- Hapus gambar lama dari disk jika ada ---
     if art.image_url:
         _delete_image_file(art.image_url)
 
-    # --- Simpan file baru dengan nama unik ---
     unique_filename = f"{uuid.uuid4().hex}{ext}"
     upload_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
-
     with open(upload_path, "wb") as f:
         f.write(contents)
 
-    # --- Bangun URL publik gambar ---
     base_url = str(request.base_url).rstrip("/")
-    public_url = f"{base_url}/static/uploads/{unique_filename}"
-
-    # --- Update DB ---
-    art.image_url = public_url
+    art.image_url = f"{base_url}/static/uploads/{unique_filename}"
     db.commit()
     db.refresh(art)
-
-    return art
+    return serialize_article(art, "id")
 
 
 @router.delete(
@@ -226,41 +311,14 @@ def delete_article_image(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """
-    [Admin & Super Admin] Hapus gambar dari artikel.
-
-    - File gambar dihapus dari server.
-    - Field `image_url` di artikel di-set menjadi `null`.
-    """
     art = db.query(Article).filter(Article.id == article_id).first()
     if not art:
         raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
-
     if not art.image_url:
         raise HTTPException(status_code=404, detail="Artikel ini tidak memiliki gambar.")
 
-    # Hapus file dari disk
     _delete_image_file(art.image_url)
-
-    # Reset image_url di DB
     art.image_url = None
     db.commit()
     db.refresh(art)
-
-    return art
-
-
-# ──────────────────────────────────────────────
-# Helper
-# ──────────────────────────────────────────────
-
-def _delete_image_file(image_url: str) -> None:
-    """Hapus file gambar dari disk berdasarkan URL-nya. Tidak raise error jika file tidak ada."""
-    try:
-        # Ambil nama file dari URL (bagian terakhir setelah '/uploads/')
-        filename = image_url.split("/uploads/")[-1]
-        file_path = os.path.join(settings.UPLOAD_DIR, filename)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
-    except Exception:
-        pass  # Jika gagal hapus file, abaikan (tidak blokir operasi DB)
+    return serialize_article(art, "id")

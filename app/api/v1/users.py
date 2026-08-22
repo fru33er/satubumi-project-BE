@@ -66,9 +66,9 @@ def update_user(
     user_id: int,
     user_in: UserUpdate,
     db: Session = Depends(get_db),
-    super_admin: User = Depends(require_super_admin)
+    super_admin: User = Depends(require_super_admin),
 ):
-    """[Super Admin Only] Update data user (nama, role, status aktif, password, dll)"""
+    """[Super Admin Only] Update data user (email, nama, role, password, dll)"""
     usr = db.query(User).filter(User.id == user_id).first()
     if not usr:
         raise HTTPException(status_code=404, detail="User tidak ditemukan.")
@@ -76,13 +76,24 @@ def update_user(
     if user_in.role and user_in.role not in ALLOWED_ROLES:
         raise HTTPException(
             status_code=400,
-            detail=f"Role tidak valid. Pilihan: {', '.join(ALLOWED_ROLES)}"
+            detail=f"Role tidak valid. Pilihan: {', '.join(ALLOWED_ROLES)}",
         )
 
-    # Terapkan perubahan field yang dikirim saja (partial update)
     update_data = user_in.model_dump(exclude_unset=True)
+
+    # Email baru harus unik
+    if "email" in update_data and update_data["email"] != usr.email:
+        taken = (
+            db.query(User)
+            .filter(User.email == update_data["email"], User.id != user_id)
+            .first()
+        )
+        if taken:
+            raise HTTPException(status_code=400, detail="Email sudah terdaftar.")
+
     if "password" in update_data:
         usr.hashed_password = get_password_hash(update_data.pop("password"))
+
     for field, value in update_data.items():
         setattr(usr, field, value)
 
