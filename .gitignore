@@ -39,7 +39,7 @@ uploaded_*.zip
 test_shapefile.zip
 *.zip
 *.docx
-extracted_profil.txt
+extracted_*.txt
 
 # Upload gambar artikel — abaikan file gambar, tapi track folder-nya
 static/uploads/*
