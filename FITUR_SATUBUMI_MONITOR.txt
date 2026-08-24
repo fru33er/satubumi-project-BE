@@ -1,0 +1,159 @@
+====================================================
+       FITUR BARU: SATUBUMI MONITOR
+       Digital Monitoring Platform for Nature-Based Projects
+====================================================
+
+Satubumi Monitor adalah sistem untuk memantau proyek berbasis alam
+(restorasi hutan, penanaman pohon, dll) secara digital dan terstruktur.
+
+Semua fitur ini diakses via API dengan prefix:
+  /api/v1/projects/...
+
+
+----------------------------------------------------
+1. KELOLA PROYEK (Master Data)
+----------------------------------------------------
+- Buat proyek baru dengan nama, lokasi, luas area (ha), dan status
+- Simpan batas wilayah proyek dalam format peta (GeoJSON Polygon)
+- Simpan target proyek (misal: tanam 100.000 pohon, restorasi 1.000 ha)
+- Update dan hapus proyek
+- Hanya admin/super_admin yang bisa buat/edit/hapus
+
+
+----------------------------------------------------
+2. DASHBOARD RINGKASAN
+----------------------------------------------------
+- Satu endpoint yang menampilkan SEMUA angka penting proyek sekaligus:
+    * Jumlah pohon ditanam, hidup, mati, dan survival rate (%)
+    * Estimasi carbon stock
+    * Jumlah spesies keanekaragaman hayati yang tercatat
+    * Jumlah desa dan warga yang terdampak
+    * Daftar kegiatan terbaru
+    * Daftar alert aktif
+
+
+----------------------------------------------------
+3. KEGIATAN PROYEK (Activities)
+----------------------------------------------------
+- Catat setiap kegiatan yang dilakukan dalam proyek
+- Jenis kegiatan yang bisa dicatat:
+    * Penanaman (planting)
+    * Restorasi (restoration)
+    * Survey keanekaragaman hayati (biodiversity_survey)
+    * Pengembangan komunitas (community_development)
+    * Pencegahan kebakaran (fire_prevention)
+    * Perlindungan hutan (forest_protection)
+- Setiap kegiatan menyimpan: tanggal, lokasi (koordinat), target,
+  realisasi, satuan, pelaksana, foto, dan catatan
+
+
+----------------------------------------------------
+4. MONITORING POHON (Tree Records)
+----------------------------------------------------
+- Catat data tanam pohon per-batch atau per-plot
+- Data yang dicatat: plot ID, spesies, jumlah, tanggal tanam,
+  lokasi (koordinat), kondisi, tinggi (cm), diameter/DBH (cm),
+  status hidup/mati, foto, catatan
+- Kondisi pohon: healthy / stressed / dead
+- Backend otomatis menghitung:
+    * Trees Planted  : total pohon ditanam
+    * Trees Survived : total pohon masih hidup
+    * Trees Dead     : total pohon mati
+    * Survival Rate  : persentase pohon hidup (%)
+- Ada endpoint khusus /summary untuk angka agregat di atas
+
+
+----------------------------------------------------
+5. LAPORAN LAPANGAN (Field Reports)
+----------------------------------------------------
+- Petugas lapangan bisa submit laporan langsung ke sistem
+- Data yang dicatat: nama petugas, plot ID, koordinat GPS,
+  tanggal & waktu, jenis laporan, deskripsi kegiatan,
+  hasil/temuan, dan foto
+- Jenis laporan: tree_monitoring / biodiversity / incident /
+  general / community
+- Semua user yang login (termasuk client) bisa submit laporan
+
+
+----------------------------------------------------
+6. ALERT OTOMATIS (Environmental Alerts)
+----------------------------------------------------
+- Sistem OTOMATIS membuat peringatan tanpa perlu diatur manual:
+
+    [AUTO] Survival rate pohon < 70%  --> Alert: low_tree_survival (high)
+    [AUTO] Survival rate pohon < 50%  --> Alert: low_tree_survival (critical)
+    [AUTO] Tidak ada laporan lapangan > 30 hari --> Alert: monitoring_overdue
+
+- Admin juga bisa buat alert manual untuk:
+    * Deforestasi (deforestation)
+    * Kebakaran (fire)
+    * Perubahan penggunaan lahan (land_cover_change)
+
+- Tingkat keparahan alert: low / medium / high / critical
+- Alert bisa di-mark sebagai "sudah dibaca" atau "sudah diselesaikan"
+- Saat alert diselesaikan, timestamp resolved_at otomatis terisi
+
+
+----------------------------------------------------
+7. MONITORING KEANEKARAGAMAN HAYATI (Biodiversity)
+----------------------------------------------------
+- Catat hasil observasi satwa dan flora di lokasi proyek
+- Data yang dicatat: nama spesies, tipe (fauna/flora),
+  lokasi (koordinat), tanggal observasi, habitat, observer, foto
+- Ada endpoint ringkasan yang menampilkan:
+    * Total observasi
+    * Jumlah spesies unik
+    * Jumlah fauna
+    * Jumlah flora
+
+
+----------------------------------------------------
+8. DATA DAMPAK KOMUNITAS (Community)
+----------------------------------------------------
+- Catat dampak sosial dan ekonomi proyek terhadap masyarakat
+- Data yang dicatat: nama desa, jumlah penerima manfaat,
+  jumlah kelompok mata pencaharian, tenaga kerja,
+  nilai investasi ke komunitas, jenis kegiatan
+- Ada endpoint ringkasan yang menampilkan total agregat:
+    * Total desa
+    * Total penerima manfaat
+    * Total kelompok livelihood
+    * Total tenaga kerja
+    * Total investasi komunitas (USD)
+
+
+----------------------------------------------------
+9. DATA ESTIMASI KARBON (Carbon)
+----------------------------------------------------
+- Simpan data monitoring karbon per periode
+- Data yang dicatat: periode awal & akhir, carbon stock (tCO2e),
+  biomassa (ton), estimasi CO2e, perubahan karbon,
+  metodologi, catatan
+- PENTING: Data ini adalah ESTIMASI MONITORING,
+  bukan verified carbon credit
+
+
+====================================================
+CATATAN TEKNIS
+====================================================
+
+Hak Akses:
+  - admin / super_admin : bisa buat, edit, hapus semua data
+  - client              : hanya bisa lihat + submit field report
+                          + mark alert
+
+Auto-Alert tidak duplikat:
+  Jika sudah ada alert aktif dengan tipe yang sama,
+  sistem tidak akan membuat alert baru.
+
+Relasi data:
+  Semua data monitor (pohon, kegiatan, laporan, dll)
+  terhubung ke satu project_id.
+  Jika proyek dihapus, semua data monitor-nya ikut terhapus.
+
+Format lokasi/koordinat:
+  Semua lokasi menggunakan format GeoJSON standar.
+  Contoh titik: { "type": "Point", "coordinates": [108.5, -1.5] }
+  Contoh area : { "type": "Polygon", "coordinates": [[...]] }
+
+====================================================
