@@ -42,8 +42,8 @@ test_shapefile.zip
 extracted_*.txt
 
 # Upload gambar artikel — abaikan file gambar, tapi track folder-nya
-static/uploads/*
-!static/uploads/.gitkeep
+# static/uploads/*
+# !static/uploads/.gitkeep
 
 
 # IDE & Editors
