@@ -1,20 +1,28 @@
 import os
 import uuid
-from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Request
-from sqlalchemy import func, desc
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import require_admin
-from app.core.config import settings
-from app.models.user import User
 from app.models.article import Article
+from app.models.user import User
 from app.schemas.article import (
     ArticleCreate,
-    ArticleUpdate,
     ArticleResponse,
+    ArticleUpdate,
     TopAuthorItem,
     TopicItem,
 )
@@ -38,6 +46,9 @@ def serialize_article(art: Article, lang: str = "id") -> dict:
         "title_en": getattr(art, "title_en", None),
         "slug": art.slug,
         "author": art.author or "Satubumi Team",
+        "author_profile_image": (
+            art.author_user.profile_image if art.author_user else None
+        ),
         "content": (art.content_en if use_en and art.content_en else art.content),
         "content_en": getattr(art, "content_en", None),
         "status": art.status,
@@ -65,12 +76,17 @@ def _delete_image_file(image_url: str) -> None:
 # LIST & FILTER (publik)
 # ──────────────────────────────────────────────
 
-@router.get("/", response_model=List[ArticleResponse])
+
+@router.get("/", response_model=list[ArticleResponse])
 async def get_articles(
-    category: Optional[str] = Query(None, description="about | services | insight | home | ..."),
-    topic: Optional[str] = Query(None, description="carbon | esg | policy | nature | other"),
-    is_featured: Optional[bool] = Query(None),
-    author: Optional[str] = Query(None),
+    category: str | None = Query(
+        None, description="about | services | insight | home | ..."
+    ),
+    topic: str | None = Query(
+        None, description="carbon | esg | policy | nature | other"
+    ),
+    is_featured: bool | None = Query(None),
+    author: str | None = Query(None),
     lang: str = Query("id", description="id | en"),
     db: Session = Depends(get_db),
 ):
@@ -92,7 +108,8 @@ async def get_articles(
 # INSIGHTS STATS (HARUS di atas /{article_id})
 # ──────────────────────────────────────────────
 
-@router.get("/insights/top", response_model=List[ArticleResponse])
+
+@router.get("/insights/top", response_model=list[ArticleResponse])
 def get_top_insights(
     limit: int = Query(5, ge=1, le=20),
     by: str = Query("featured", description="featured | views | recent"),
@@ -114,7 +131,7 @@ def get_top_insights(
     return [serialize_article(art, lang) for art in articles]
 
 
-@router.get("/insights/top-authors", response_model=List[TopAuthorItem])
+@router.get("/insights/top-authors", response_model=list[TopAuthorItem])
 def get_top_authors(
     limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
@@ -131,12 +148,11 @@ def get_top_authors(
         .all()
     )
     return [
-        TopAuthorItem(author=(r.author or "Satubumi Team"), count=r.count)
-        for r in rows
+        TopAuthorItem(author=(r.author or "Satubumi Team"), count=r.count) for r in rows
     ]
 
 
-@router.get("/insights/topics", response_model=List[TopicItem])
+@router.get("/insights/topics", response_model=list[TopicItem])
 def get_insight_topics(db: Session = Depends(get_db)):
     rows = (
         db.query(Article.topic, func.count(Article.id).label("count"))
@@ -173,6 +189,7 @@ def increment_article_view(
 # DETAIL BY ID
 # ──────────────────────────────────────────────
 
+
 @router.get("/{article_id}", response_model=ArticleResponse)
 async def get_article(
     article_id: int,
@@ -189,6 +206,7 @@ async def get_article(
 # CRUD (admin)
 # ──────────────────────────────────────────────
 
+
 @router.post("/", response_model=ArticleResponse, status_code=status.HTTP_201_CREATED)
 def create_article(
     article_in: ArticleCreate,
@@ -198,6 +216,7 @@ def create_article(
     data = article_in.dict()
     if getattr(admin, "full_name", None):
         data["author"] = admin.full_name
+        data["author_id"] = admin.id
     data.setdefault("is_featured", False)
     data.setdefault("view_count", 0)
 
@@ -252,6 +271,7 @@ def delete_article(
 # ──────────────────────────────────────────────
 # IMAGE
 # ──────────────────────────────────────────────
+
 
 @router.post(
     "/{article_id}/image",
@@ -315,7 +335,9 @@ def delete_article_image(
     if not art:
         raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
     if not art.image_url:
-        raise HTTPException(status_code=404, detail="Artikel ini tidak memiliki gambar.")
+        raise HTTPException(
+            status_code=404, detail="Artikel ini tidak memiliki gambar."
+        )
 
     _delete_image_file(art.image_url)
     art.image_url = None

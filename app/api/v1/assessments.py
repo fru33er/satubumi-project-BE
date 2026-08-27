@@ -1,11 +1,12 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
+
+from app.api.v1.auth import get_current_user
 from app.core.database import get_db
 from app.models.assessment import Assessment
 from app.models.user import User
-from app.schemas.assessment import AssessmentSubmitRequest, AssessmentResponse
-from app.api.v1.auth import get_current_user
+from app.schemas.assessment import AssessmentResponse, AssessmentSubmitRequest
 
 router = APIRouter(prefix="/assessments", tags=["Assessment History"])
 
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/assessments", tags=["Assessment History"])
 def save_assessment(
     body: AssessmentSubmitRequest,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User | None = Depends(get_current_user),
 ):
     """
     Menyimpan hasil kalkulasi Rapid-FS ke database histori assessment.
@@ -59,7 +60,7 @@ def save_assessment(
         component_scores_json=result.component_scores.model_dump(),
         cost_breakdown_json=result.cost_breakdown.model_dump(),
         geometry_geojson=result.geometry,
-        recommendations_json=result.recommendations
+        recommendations_json=result.recommendations,
     )
     db.add(new_assessment)
     db.commit()
@@ -68,14 +69,13 @@ def save_assessment(
         "id": new_assessment.id,
         "message": "Hasil assessment berhasil disimpan.",
         "submitter_name": new_assessment.submitter_name,
-        "submitter_email": new_assessment.submitter_email
+        "submitter_email": new_assessment.submitter_email,
     }
 
 
-@router.get("", response_model=List[AssessmentResponse])
+@router.get("", response_model=list[AssessmentResponse])
 def list_assessments(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """
     Mendapatkan daftar histori assessment.
@@ -99,7 +99,7 @@ def list_assessments(
 def get_assessment(
     assessment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Mendapatkan detail satu assessment berdasarkan ID.
@@ -108,7 +108,10 @@ def get_assessment(
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment tidak ditemukan.")
-    if current_user.role not in ["admin", "super_admin"] and assessment.user_id != current_user.id:
+    if (
+        current_user.role not in ["admin", "super_admin"]
+        and assessment.user_id != current_user.id
+    ):
         raise HTTPException(status_code=403, detail="Akses ditolak.")
     return assessment
 
@@ -117,7 +120,7 @@ def get_assessment(
 def delete_assessment(
     assessment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Menghapus assessment berdasarkan ID.
@@ -126,7 +129,10 @@ def delete_assessment(
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment tidak ditemukan.")
-    if current_user.role not in ["admin", "super_admin"] and assessment.user_id != current_user.id:
+    if (
+        current_user.role not in ["admin", "super_admin"]
+        and assessment.user_id != current_user.id
+    ):
         raise HTTPException(status_code=403, detail="Akses ditolak.")
 
     db.delete(assessment)

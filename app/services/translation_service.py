@@ -16,10 +16,11 @@ Cara pakai:
 Dokumentasi: https://mymemory.translated.net/doc/spec.php
 """
 
-import hashlib
 import asyncio
+import hashlib
+
 import httpx
-from typing import Optional
+
 from app.core.config import settings
 
 # In-memory cache: { "md5(lang::text)": "hasil terjemahan" }

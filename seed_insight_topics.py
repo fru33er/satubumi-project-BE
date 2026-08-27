@@ -1,4 +1,4 @@
-from app.core.database import SessionLocal, engine, Base
+from app.core.database import Base, SessionLocal, engine
 from app.models.insight_topic import InsightTopic
 
 Base.metadata.create_all(bind=engine)

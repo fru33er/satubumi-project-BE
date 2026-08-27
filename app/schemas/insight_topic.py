@@ -1,7 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import datetime
 import re
+from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 def slugify(text: str) -> str:
@@ -14,7 +14,7 @@ def slugify(text: str) -> str:
 class InsightTopicBase(BaseModel):
     label_id: str = Field(..., min_length=1, max_length=100)
     label_en: str = Field(..., min_length=1, max_length=100)
-    slug: Optional[str] = None
+    slug: str | None = None
 
 
 class InsightTopicCreate(InsightTopicBase):
@@ -22,9 +22,9 @@ class InsightTopicCreate(InsightTopicBase):
 
 
 class InsightTopicUpdate(BaseModel):
-    label_id: Optional[str] = None
-    label_en: Optional[str] = None
-    slug: Optional[str] = None
+    label_id: str | None = None
+    label_en: str | None = None
+    slug: str | None = None
 
 
 class InsightTopicResponse(BaseModel):
@@ -32,7 +32,7 @@ class InsightTopicResponse(BaseModel):
     slug: str
     label_id: str
     label_en: str
-    created_by: Optional[str] = None
+    created_by: str | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -1,5 +1,7 @@
 """Tambah kolom insights + bilingual jika belum ada."""
+
 from sqlalchemy import text
+
 from app.core.database import engine
 
 COLS = [
@@ -12,8 +14,7 @@ COLS = [
 
 with engine.connect() as conn:
     existing = {
-        row[1]
-        for row in conn.execute(text("PRAGMA table_info(articles)")).fetchall()
+        row[1] for row in conn.execute(text("PRAGMA table_info(articles)")).fetchall()
     }
     for name, typedef in COLS:
         if name not in existing:

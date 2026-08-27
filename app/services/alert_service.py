@@ -4,13 +4,16 @@ Alert Service — Logika auto-trigger untuk sistem alert SATUBUMI MONITOR.
 Digunakan oleh router monitor.py untuk mengecek kondisi dan membuat alert
 secara otomatis tanpa perlu Celery/background worker.
 """
+
 from datetime import datetime, timedelta
+
 from sqlalchemy.orm import Session
-from app.models.monitor import TreeRecord, FieldReport, Alert
+
+from app.models.monitor import Alert, FieldReport, TreeRecord
 
 # Threshold untuk auto-alert
-SURVIVAL_RATE_THRESHOLD = 70.0     # Alert jika survival rate < 70%
-MONITORING_OVERDUE_DAYS = 30       # Alert jika tidak ada field report > 30 hari
+SURVIVAL_RATE_THRESHOLD = 70.0  # Alert jika survival rate < 70%
+MONITORING_OVERDUE_DAYS = 30  # Alert jika tidak ada field report > 30 hari
 
 
 def check_and_create_survival_alert(db: Session, project_id: int) -> bool:
@@ -85,10 +88,9 @@ def check_and_create_overdue_alert(db: Session, project_id: int) -> bool:
         .first()
     )
 
-    is_overdue = (
-        last_report is None
-        or (datetime.utcnow() - last_report.report_date) > timedelta(days=MONITORING_OVERDUE_DAYS)
-    )
+    is_overdue = last_report is None or (
+        datetime.utcnow() - last_report.report_date
+    ) > timedelta(days=MONITORING_OVERDUE_DAYS)
 
     if not is_overdue:
         return False

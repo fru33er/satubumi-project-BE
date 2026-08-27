@@ -1,28 +1,48 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import List, Optional
 from datetime import datetime
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.api.v1.auth import get_current_user
 from app.core.database import get_db
-from app.models.project import Project
 from app.models.monitor import (
-    ProjectActivity, TreeRecord, FieldReport,
-    Alert, BiodiversityObservation, CommunityData, CarbonRecord
+    Alert,
+    BiodiversityObservation,
+    CarbonRecord,
+    CommunityData,
+    FieldReport,
+    ProjectActivity,
+    TreeRecord,
 )
+from app.models.project import Project
 from app.models.user import User
 from app.schemas.monitor import (
-    ActivityCreate, ActivityResponse,
-    TreeRecordCreate, TreeRecordUpdate, TreeRecordResponse, TreeSummary,
-    FieldReportCreate, FieldReportResponse,
-    AlertCreate, AlertUpdate, AlertResponse,
-    BiodiversityCreate, BiodiversityResponse, BiodiversitySummary,
-    CommunityCreate, CommunityResponse, CommunitySummary,
-    CarbonCreate, CarbonResponse,
+    ActivityCreate,
+    ActivityResponse,
+    AlertCreate,
+    AlertResponse,
+    AlertUpdate,
+    BiodiversityCreate,
+    BiodiversityResponse,
+    BiodiversitySummary,
+    CarbonCreate,
+    CarbonResponse,
+    CommunityCreate,
+    CommunityResponse,
+    CommunitySummary,
     DashboardResponse,
+    FieldReportCreate,
+    FieldReportResponse,
+    TreeRecordCreate,
+    TreeRecordResponse,
+    TreeRecordUpdate,
+    TreeSummary,
 )
-from app.api.v1.auth import get_current_user
-from app.services.alert_service import check_and_create_survival_alert, check_and_create_overdue_alert
+from app.services.alert_service import (
+    check_and_create_overdue_alert,
+    check_and_create_survival_alert,
+)
 
 router = APIRouter(prefix="/projects", tags=["Monitor — Data"])
 
@@ -31,11 +51,12 @@ router = APIRouter(prefix="/projects", tags=["Monitor — Data"])
 # HELPERS
 # ─────────────────────────────────────────────
 
+
 def require_admin(current_user: User) -> User:
     if current_user.role not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Hanya admin atau super_admin yang dapat melakukan aksi ini."
+            detail="Hanya admin atau super_admin yang dapat melakukan aksi ini.",
         )
     return current_user
 
@@ -51,11 +72,12 @@ def get_project_or_404(project_id: int, db: Session) -> Project:
 # DASHBOARD
 # ─────────────────────────────────────────────
 
+
 @router.get("/{project_id}/dashboard", response_model=DashboardResponse)
 def get_dashboard(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Dashboard agregat untuk satu proyek.
@@ -72,11 +94,15 @@ def get_dashboard(
     check_and_create_overdue_alert(db, project_id)
 
     # --- Statistik Pohon ---
-    tree_records = db.query(TreeRecord).filter(TreeRecord.project_id == project_id).all()
+    tree_records = (
+        db.query(TreeRecord).filter(TreeRecord.project_id == project_id).all()
+    )
     trees_planted = sum(r.quantity for r in tree_records)
     trees_survived = sum(r.quantity for r in tree_records if r.is_alive)
     trees_dead = trees_planted - trees_survived
-    survival_rate = round((trees_survived / trees_planted * 100), 2) if trees_planted > 0 else None
+    survival_rate = (
+        round((trees_survived / trees_planted * 100), 2) if trees_planted > 0 else None
+    )
 
     # --- Karbon (record terbaru) ---
     latest_carbon = (
@@ -97,7 +123,9 @@ def get_dashboard(
     community_agg = (
         db.query(
             func.sum(CommunityData.beneficiary_count).label("total_beneficiaries"),
-            func.count(func.distinct(CommunityData.village_name)).label("total_villages"),
+            func.count(func.distinct(CommunityData.village_name)).label(
+                "total_villages"
+            ),
             func.sum(CommunityData.livelihood_groups).label("total_livelihood_groups"),
         )
         .filter(CommunityData.project_id == project_id)
@@ -113,7 +141,13 @@ def get_dashboard(
         .all()
     )
     recent_activities = [
-        {"id": a.id, "type": a.activity_type, "date": str(a.activity_date), "realization": a.realization, "unit": a.unit}
+        {
+            "id": a.id,
+            "type": a.activity_type,
+            "date": str(a.activity_date),
+            "realization": a.realization,
+            "unit": a.unit,
+        }
         for a in recent_activities_db
     ]
 
@@ -131,7 +165,13 @@ def get_dashboard(
         .scalar()
     ) or 0
     recent_alerts = [
-        {"id": a.id, "type": a.alert_type, "severity": a.severity, "description": a.description, "created_at": str(a.created_at)}
+        {
+            "id": a.id,
+            "type": a.alert_type,
+            "severity": a.severity,
+            "description": a.description,
+            "created_at": str(a.created_at),
+        }
         for a in active_alerts_db
     ]
 
@@ -168,7 +208,9 @@ def get_dashboard(
         active_alerts=active_alerts_count,
         recent_alerts=recent_alerts,
         total_field_reports=total_field_reports,
-        last_field_report=last_field_report_obj.report_date if last_field_report_obj else None,
+        last_field_report=last_field_report_obj.report_date
+        if last_field_report_obj
+        else None,
     )
 
 
@@ -176,12 +218,17 @@ def get_dashboard(
 # PROJECT ACTIVITIES
 # ─────────────────────────────────────────────
 
-@router.post("/{project_id}/activities", response_model=ActivityResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{project_id}/activities",
+    response_model=ActivityResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_activity(
     project_id: int,
     body: ActivityCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Mencatat kegiatan proyek baru.
@@ -211,11 +258,11 @@ def create_activity(
     return activity
 
 
-@router.get("/{project_id}/activities", response_model=List[ActivityResponse])
+@router.get("/{project_id}/activities", response_model=list[ActivityResponse])
 def list_activities(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Mendapatkan semua kegiatan untuk satu proyek, diurutkan dari terbaru."""
     get_project_or_404(project_id, db)
@@ -232,13 +279,15 @@ def get_activity(
     project_id: int,
     activity_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Mendapatkan detail satu kegiatan."""
     get_project_or_404(project_id, db)
     activity = (
         db.query(ProjectActivity)
-        .filter(ProjectActivity.id == activity_id, ProjectActivity.project_id == project_id)
+        .filter(
+            ProjectActivity.id == activity_id, ProjectActivity.project_id == project_id
+        )
         .first()
     )
     if not activity:
@@ -250,12 +299,17 @@ def get_activity(
 # TREE RECORDS
 # ─────────────────────────────────────────────
 
-@router.post("/{project_id}/trees", response_model=TreeRecordResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{project_id}/trees",
+    response_model=TreeRecordResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_tree_record(
     project_id: int,
     body: TreeRecordCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Menambahkan data tanam pohon (per batch/plot).
@@ -291,11 +345,11 @@ def create_tree_record(
     return record
 
 
-@router.get("/{project_id}/trees", response_model=List[TreeRecordResponse])
+@router.get("/{project_id}/trees", response_model=list[TreeRecordResponse])
 def list_tree_records(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Mendapatkan semua record pohon untuk satu proyek."""
     get_project_or_404(project_id, db)
@@ -311,7 +365,7 @@ def list_tree_records(
 def get_tree_summary(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Ringkasan statistik pohon proyek:
@@ -323,7 +377,9 @@ def get_tree_summary(
     trees_planted = sum(r.quantity for r in records)
     trees_survived = sum(r.quantity for r in records if r.is_alive)
     trees_dead = trees_planted - trees_survived
-    survival_rate = round((trees_survived / trees_planted * 100), 2) if trees_planted > 0 else 0.0
+    survival_rate = (
+        round((trees_survived / trees_planted * 100), 2) if trees_planted > 0 else 0.0
+    )
     alert_triggered = survival_rate < 70.0 and trees_planted > 0
 
     return TreeSummary(
@@ -341,7 +397,7 @@ def update_tree_record(
     tree_id: int,
     body: TreeRecordUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Update kondisi pohon (monitoring berkala).
@@ -377,12 +433,17 @@ def update_tree_record(
 # FIELD REPORTS
 # ─────────────────────────────────────────────
 
-@router.post("/{project_id}/field-reports", response_model=FieldReportResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{project_id}/field-reports",
+    response_model=FieldReportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_field_report(
     project_id: int,
     body: FieldReportCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Submit laporan dari petugas lapangan.
@@ -410,11 +471,11 @@ def create_field_report(
     return report
 
 
-@router.get("/{project_id}/field-reports", response_model=List[FieldReportResponse])
+@router.get("/{project_id}/field-reports", response_model=list[FieldReportResponse])
 def list_field_reports(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Mendapatkan semua laporan lapangan untuk satu proyek."""
     get_project_or_404(project_id, db)
@@ -426,12 +487,14 @@ def list_field_reports(
     )
 
 
-@router.get("/{project_id}/field-reports/{report_id}", response_model=FieldReportResponse)
+@router.get(
+    "/{project_id}/field-reports/{report_id}", response_model=FieldReportResponse
+)
 def get_field_report(
     project_id: int,
     report_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Mendapatkan detail satu laporan lapangan."""
     get_project_or_404(project_id, db)
@@ -449,12 +512,13 @@ def get_field_report(
 # ALERTS
 # ─────────────────────────────────────────────
 
-@router.get("/{project_id}/alerts", response_model=List[AlertResponse])
+
+@router.get("/{project_id}/alerts", response_model=list[AlertResponse])
 def list_alerts(
     project_id: int,
     only_active: bool = True,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Mendapatkan daftar alert untuk satu proyek.
@@ -476,12 +540,16 @@ def list_alerts(
     return query.order_by(Alert.created_at.desc()).all()
 
 
-@router.post("/{project_id}/alerts", response_model=AlertResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{project_id}/alerts",
+    response_model=AlertResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_alert(
     project_id: int,
     body: AlertCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Membuat alert secara manual oleh admin.
@@ -512,7 +580,7 @@ def update_alert(
     alert_id: int,
     body: AlertUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Update status alert: mark as read atau mark as resolved.
@@ -544,12 +612,17 @@ def update_alert(
 # BIODIVERSITY OBSERVATIONS
 # ─────────────────────────────────────────────
 
-@router.post("/{project_id}/biodiversity", response_model=BiodiversityResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{project_id}/biodiversity",
+    response_model=BiodiversityResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_biodiversity_observation(
     project_id: int,
     body: BiodiversityCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Mencatat observasi biodiversitas baru (satwa atau flora)."""
     require_admin(current_user)
@@ -572,11 +645,11 @@ def create_biodiversity_observation(
     return obs
 
 
-@router.get("/{project_id}/biodiversity", response_model=List[BiodiversityResponse])
+@router.get("/{project_id}/biodiversity", response_model=list[BiodiversityResponse])
 def list_biodiversity_observations(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Mendapatkan semua observasi biodiversitas untuk satu proyek."""
     get_project_or_404(project_id, db)
@@ -592,13 +665,15 @@ def list_biodiversity_observations(
 def get_biodiversity_summary(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Ringkasan biodiversitas: jumlah total observasi, spesies unik, fauna, dan flora."""
     get_project_or_404(project_id, db)
-    all_obs = db.query(BiodiversityObservation).filter(
-        BiodiversityObservation.project_id == project_id
-    ).all()
+    all_obs = (
+        db.query(BiodiversityObservation)
+        .filter(BiodiversityObservation.project_id == project_id)
+        .all()
+    )
 
     unique_species = len(set(o.species_name for o in all_obs))
     fauna_count = sum(1 for o in all_obs if o.species_type == "fauna")
@@ -616,12 +691,17 @@ def get_biodiversity_summary(
 # COMMUNITY DATA
 # ─────────────────────────────────────────────
 
-@router.post("/{project_id}/community", response_model=CommunityResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{project_id}/community",
+    response_model=CommunityResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_community_data(
     project_id: int,
     body: CommunityCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Mencatat data dampak sosial dan ekonomi proyek terhadap komunitas."""
     require_admin(current_user)
@@ -644,11 +724,11 @@ def create_community_data(
     return data
 
 
-@router.get("/{project_id}/community", response_model=List[CommunityResponse])
+@router.get("/{project_id}/community", response_model=list[CommunityResponse])
 def list_community_data(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Mendapatkan semua data komunitas untuk satu proyek."""
     get_project_or_404(project_id, db)
@@ -664,11 +744,13 @@ def list_community_data(
 def get_community_summary(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Ringkasan dampak komunitas: villages, beneficiaries, livelihood groups, employment."""
     get_project_or_404(project_id, db)
-    all_data = db.query(CommunityData).filter(CommunityData.project_id == project_id).all()
+    all_data = (
+        db.query(CommunityData).filter(CommunityData.project_id == project_id).all()
+    )
 
     return CommunitySummary(
         total_villages=len(set(d.village_name for d in all_data)),
@@ -683,12 +765,17 @@ def get_community_summary(
 # CARBON RECORDS
 # ─────────────────────────────────────────────
 
-@router.post("/{project_id}/carbon", response_model=CarbonResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{project_id}/carbon",
+    response_model=CarbonResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_carbon_record(
     project_id: int,
     body: CarbonCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Menambahkan data monitoring karbon untuk satu periode.
@@ -715,11 +802,11 @@ def create_carbon_record(
     return record
 
 
-@router.get("/{project_id}/carbon", response_model=List[CarbonResponse])
+@router.get("/{project_id}/carbon", response_model=list[CarbonResponse])
 def list_carbon_records(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Mendapatkan semua record karbon untuk satu proyek, diurutkan dari periode terbaru."""
     get_project_or_404(project_id, db)

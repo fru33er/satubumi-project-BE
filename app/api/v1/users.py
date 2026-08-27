@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+import shutil
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
-from typing import List
+
 from app.core.database import get_db
 from app.core.dependencies import require_super_admin
 from app.core.security import get_password_hash
@@ -13,8 +16,10 @@ ALLOWED_ROLES = {"admin", "super_admin", "client"}
 router = APIRouter(prefix="/users", tags=["User Management (Super Admin Only)"])
 
 
-@router.get("/", response_model=List[UserResponse])
-def list_users(db: Session = Depends(get_db), super_admin: User = Depends(require_super_admin)):
+@router.get("/", response_model=list[UserResponse])
+def list_users(
+    db: Session = Depends(get_db), super_admin: User = Depends(require_super_admin)
+):
     """[Super Admin Only] Ambil semua daftar pengguna"""
     return db.query(User).all()
 
@@ -23,13 +28,13 @@ def list_users(db: Session = Depends(get_db), super_admin: User = Depends(requir
 def create_user(
     user_in: UserCreate,
     db: Session = Depends(get_db),
-    super_admin: User = Depends(require_super_admin)
+    super_admin: User = Depends(require_super_admin),
 ):
     """[Super Admin Only] Buat akun user baru (admin / super_admin / client)"""
     if user_in.role and user_in.role not in ALLOWED_ROLES:
         raise HTTPException(
             status_code=400,
-            detail=f"Role tidak valid. Pilihan: {', '.join(ALLOWED_ROLES)}"
+            detail=f"Role tidak valid. Pilihan: {', '.join(ALLOWED_ROLES)}",
         )
     existing = db.query(User).filter(User.email == user_in.email).first()
     if existing:
@@ -40,7 +45,7 @@ def create_user(
         hashed_password=get_password_hash(user_in.password),
         full_name=user_in.full_name,
         phone_number=user_in.phone_number,
-        role=user_in.role or "admin"
+        role=user_in.role or "admin",
     )
     db.add(new_user)
     db.commit()
@@ -52,7 +57,7 @@ def create_user(
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    super_admin: User = Depends(require_super_admin)
+    super_admin: User = Depends(require_super_admin),
 ):
     """[Super Admin Only] Ambil detail satu user berdasarkan ID"""
     usr = db.query(User).filter(User.id == user_id).first()
@@ -106,7 +111,7 @@ def update_user(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    super_admin: User = Depends(require_super_admin)
+    super_admin: User = Depends(require_super_admin),
 ):
     """[Super Admin Only] Hapus akun user"""
     usr = db.query(User).filter(User.id == user_id).first()
@@ -115,3 +120,35 @@ def delete_user(
     db.delete(usr)
     db.commit()
 
+
+@router.put("/{user_id}/profile-image")
+async def upload_profile_image(
+    user_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    super_admin: User = Depends(require_super_admin),
+):
+
+    usr = db.query(User).filter(User.id == user_id).first()
+
+    if not usr:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan.")
+
+    upload_dir = "static/profile"
+
+    os.makedirs(upload_dir, exist_ok=True)
+
+    filename = f"user_{usr.id}_{file.filename}"
+
+    file_path = f"{upload_dir}/{filename}"
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    usr.profile_image = "/" + file_path
+
+    db.commit()
+
+    db.refresh(usr)
+
+    return {"message": "Profile image updated", "profile_image": usr.profile_image}

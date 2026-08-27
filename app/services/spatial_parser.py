@@ -1,13 +1,15 @@
-import os
-import zipfile
-import tempfile
 import json
-from typing import Tuple, Dict, Any, Optional
-import shapefile
-from shapely.geometry import shape, mapping
-from shapely.validation import make_valid
-from shapely.ops import unary_union, transform
+import os
+import tempfile
+import zipfile
+from typing import Any
+
 import pyproj
+import shapefile
+from shapely.geometry import mapping, shape
+from shapely.ops import transform, unary_union
+from shapely.validation import make_valid
+
 
 def _detect_source_crs(shp_path: str) -> pyproj.CRS:
     """
@@ -23,9 +25,9 @@ def _detect_source_crs(shp_path: str) -> pyproj.CRS:
     """
     prj_path = shp_path.replace(".shp", ".prj")
     if not os.path.exists(prj_path):
-        return pyproj.CRS('EPSG:4326')
+        return pyproj.CRS("EPSG:4326")
 
-    with open(prj_path, 'r', errors='replace') as f:
+    with open(prj_path, "r", errors="replace") as f:
         prj_text = f.read().strip()
 
     # Strategi 1: Parse langsung dengan pyproj
@@ -37,23 +39,23 @@ def _detect_source_crs(shp_path: str) -> pyproj.CRS:
     prj_upper = prj_text.upper()
 
     # Strategi 2: Fuzzy match WGS84 — tangani typo seperti "WGS984", "WGS1984"
-    wgs84_keywords = ['WGS84', 'WGS_1984', 'WGS 1984', 'WGS984', 'D_WGS', 'GCS_WGS']
+    wgs84_keywords = ["WGS84", "WGS_1984", "WGS 1984", "WGS984", "D_WGS", "GCS_WGS"]
     if any(kw in prj_upper for kw in wgs84_keywords):
-        return pyproj.CRS('EPSG:4326')
+        return pyproj.CRS("EPSG:4326")
 
     # Strategi 3: Deteksi UTM zona Indonesia (46–54)
-    if 'UTM' in prj_upper or 'TRANSVERSE_MERCATOR' in prj_upper:
+    if "UTM" in prj_upper or "TRANSVERSE_MERCATOR" in prj_upper:
         for zone_num in range(46, 55):
             if str(zone_num) in prj_text:
-                is_south = 'SOUTH' in prj_upper or 'SELATAN' in prj_upper
+                is_south = "SOUTH" in prj_upper or "SELATAN" in prj_upper
                 epsg_code = (32700 + zone_num) if is_south else (32600 + zone_num)
                 try:
-                    return pyproj.CRS(f'EPSG:{epsg_code}')
+                    return pyproj.CRS(f"EPSG:{epsg_code}")
                 except Exception:
                     pass
 
     # Strategi 4: Fallback ke WGS84
-    return pyproj.CRS('EPSG:4326')
+    return pyproj.CRS("EPSG:4326")
 
 
 def _select_best_shp(shp_paths: list, polygon_types: set) -> str:
@@ -89,7 +91,7 @@ def _select_best_shp(shp_paths: list, polygon_types: set) -> str:
     return max(shp_paths, key=os.path.getsize)
 
 
-def parse_shapefile_zip(zip_bytes: bytes) -> Tuple[Dict[str, Any], float]:
+def parse_shapefile_zip(zip_bytes: bytes) -> tuple[dict[str, Any], float]:
     """
     Mengekstrak file ZIP yang berisi berkas ESRI Shapefile (.shp, .shx, .dbf, .prj),
     membaca geometri menggunakan PyShp (Pure Python), meretransformasi CRS ke WGS84,
@@ -99,10 +101,10 @@ def parse_shapefile_zip(zip_bytes: bytes) -> Tuple[Dict[str, Any], float]:
         zip_path = os.path.join(tmpdirname, "uploaded_shapefile.zip")
         with open(zip_path, "wb") as f:
             f.write(zip_bytes)
-            
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(tmpdirname)
-            
+
         # Kumpulkan semua .shp di dalam ZIP
         shp_candidates = []
         for root, _, files in os.walk(tmpdirname):
@@ -111,7 +113,9 @@ def parse_shapefile_zip(zip_bytes: bytes) -> Tuple[Dict[str, Any], float]:
                     shp_candidates.append(os.path.join(root, file))
 
         if not shp_candidates:
-            raise ValueError("Tidak ditemukan file .shp di dalam file ZIP yang diunggah.")
+            raise ValueError(
+                "Tidak ditemukan file .shp di dalam file ZIP yang diunggah."
+            )
 
         # Pilih SHP terbaik: polygon area dengan bounding box terluas
         # shapeType polygon: 5 (Polygon), 15 (PolygonZ), 25 (PolygonM)
@@ -127,32 +131,37 @@ def parse_shapefile_zip(zip_bytes: bytes) -> Tuple[Dict[str, Any], float]:
             if not shapes:
                 raise ValueError("File Shapefile tidak berisi geometri yang valid.")
             geoms = [make_valid(shape(s.__geo_interface__)) for s in shapes if s]
-            
+
         if not geoms:
             raise ValueError("Geometri di dalam Shapefile kosong.")
-            
+
         unified_geom = geoms[0] if len(geoms) == 1 else unary_union(geoms)
-        
+
         # Transformasi ke WGS84 jika bukan WGS84
-        if source_crs != pyproj.CRS('EPSG:4326'):
-            project = pyproj.Transformer.from_crs(source_crs, pyproj.CRS('EPSG:4326'), always_xy=True).transform
+        if source_crs != pyproj.CRS("EPSG:4326"):
+            project = pyproj.Transformer.from_crs(
+                source_crs, pyproj.CRS("EPSG:4326"), always_xy=True
+            ).transform
             unified_geom = transform(project, unified_geom)
-        
+
         # Hitung luas area dalam Hektare menggunakan proyeksi equal-area (World Cylindrical Equal Area EPSG:6933)
-        proj_wgs84 = pyproj.CRS('EPSG:4326')
-        proj_equal = pyproj.CRS('EPSG:6933')
-        transformer = pyproj.Transformer.from_crs(proj_wgs84, proj_equal, always_xy=True)
-        
+        proj_wgs84 = pyproj.CRS("EPSG:4326")
+        proj_equal = pyproj.CRS("EPSG:6933")
+        transformer = pyproj.Transformer.from_crs(
+            proj_wgs84, proj_equal, always_xy=True
+        )
+
         equal_geom = transform(transformer.transform, unified_geom)
         area_m2 = equal_geom.area
         area_ha = round(area_m2 / 10000.0, 2)
-        
+
         if area_ha <= 0:
             raise ValueError("Luas area tidak valid (nol atau negatif).")
-        
+
         return mapping(unified_geom), area_ha
 
-def parse_geojson(geojson_input: str) -> Tuple[Dict[str, Any], float]:
+
+def parse_geojson(geojson_input: str) -> tuple[dict[str, Any], float]:
     """
     Memuat string / dict GeoJSON, memvalidasi poligon, dan menghitung luas area dalam hektare.
     """
@@ -160,19 +169,19 @@ def parse_geojson(geojson_input: str) -> Tuple[Dict[str, Any], float]:
         data = json.loads(geojson_input)
     else:
         data = geojson_input
-        
+
     geom_shape = shape(data if "geometry" not in data else data["geometry"])
     geom_shape = make_valid(geom_shape)
-    
-    proj_wgs84 = pyproj.CRS('EPSG:4326')
-    proj_equal = pyproj.CRS('EPSG:6933')
+
+    proj_wgs84 = pyproj.CRS("EPSG:4326")
+    proj_equal = pyproj.CRS("EPSG:6933")
     transformer = pyproj.Transformer.from_crs(proj_wgs84, proj_equal, always_xy=True)
-    
+
     equal_geom = transform(transformer.transform, geom_shape)
     area_m2 = equal_geom.area
     area_ha = round(area_m2 / 10000.0, 2)
-    
+
     if area_ha <= 0:
         raise ValueError("Luas area tidak valid (nol atau negatif).")
-    
+
     return mapping(geom_shape), area_ha

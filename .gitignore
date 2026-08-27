@@ -32,9 +32,9 @@ post-app-*.json
 !app/**/*.json
 
 # SQLite Database & Uploads
-*.db
-*.sqlite3
-satubumi.db
+# *.db
+# *.sqlite3
+# satubumi.db
 uploaded_*.zip
 test_shapefile.zip
 *.zip

@@ -1,18 +1,20 @@
 """
 Script Seeder untuk membuat akun awal Super Admin dan Admin di Database Backend
 """
-import sys
+
 import os
+import sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app.core.database import SessionLocal, engine, Base
+from app.core.database import Base, SessionLocal, engine
 from app.core.security import get_password_hash
 from app.models.user import User
 
+
 def seed_initial_users():
     Base.metadata.create_all(bind=engine)
-    
+
     db = SessionLocal()
     try:
         # 1. Super Admin
@@ -24,10 +26,12 @@ def seed_initial_users():
                 hashed_password=get_password_hash("superadmin123"),
                 full_name="Super Administrator",
                 role="super_admin",
-                is_active=True
+                is_active=True,
             )
             db.add(super_user)
-            print(f"[OK] Akun Super Admin berhasil dibuat: {super_admin_email} / superadmin123")
+            print(
+                f"[OK] Akun Super Admin berhasil dibuat: {super_admin_email} / superadmin123"
+            )
         else:
             existing_super.role = "super_admin"
             db.commit()
@@ -42,7 +46,7 @@ def seed_initial_users():
                 hashed_password=get_password_hash("admin123"),
                 full_name="Content Admin",
                 role="admin",
-                is_active=True
+                is_active=True,
             )
             db.add(admin_user)
             print(f"[OK] Akun Admin berhasil dibuat: {admin_email} / admin123")
@@ -59,6 +63,7 @@ def seed_initial_users():
         print(f"[ERROR] Error seeding database: {e}")
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     seed_initial_users()

@@ -1,11 +1,12 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+
+from app.api.v1.auth import get_current_user
 from app.core.database import get_db
 from app.models.project import Project
 from app.models.user import User
-from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse
-from app.api.v1.auth import get_current_user
+from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 
 router = APIRouter(prefix="/projects", tags=["Monitor — Projects"])
 
@@ -15,7 +16,7 @@ def require_admin(current_user: User) -> User:
     if current_user.role not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Hanya admin atau super_admin yang dapat melakukan aksi ini."
+            detail="Hanya admin atau super_admin yang dapat melakukan aksi ini.",
         )
     return current_user
 
@@ -24,7 +25,7 @@ def require_admin(current_user: User) -> User:
 def create_project(
     body: ProjectCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Membuat proyek monitoring baru.
@@ -51,10 +52,9 @@ def create_project(
     return project
 
 
-@router.get("", response_model=List[ProjectResponse])
+@router.get("", response_model=list[ProjectResponse])
 def list_projects(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """
     Mendapatkan daftar semua proyek monitoring.
@@ -70,7 +70,7 @@ def list_projects(
 def get_project(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Mendapatkan detail satu proyek berdasarkan ID."""
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -84,7 +84,7 @@ def update_project(
     project_id: int,
     body: ProjectUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Mengupdate data proyek.
@@ -111,7 +111,7 @@ def update_project(
 def delete_project(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Menghapus proyek beserta seluruh data monitornya (cascade).

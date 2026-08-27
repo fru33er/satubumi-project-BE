@@ -1,6 +1,7 @@
-import os
 import base64
+import os
 from io import BytesIO
+
 from jinja2 import Template
 
 PDF_HTML_TEMPLATE = """
@@ -257,6 +258,7 @@ PDF_HTML_TEMPLATE = """
 </html>
 """
 
+
 def get_local_logo_base64() -> str:
     """
     Fungsi cerdas untuk mencari file 'logo.png' di folder yang sama
@@ -266,21 +268,22 @@ def get_local_logo_base64() -> str:
         # Dapatkan path absolut dari folder tempat file ini berada (app/services/)
         current_dir = os.path.dirname(os.path.abspath(__file__))
         logo_path = os.path.join(current_dir, "logo.png")
-        
+
         # Baca gambar dan encode ke Base64
         with open(logo_path, "rb") as img_file:
-            b64_string = base64.b64encode(img_file.read()).decode('utf-8')
+            b64_string = base64.b64encode(img_file.read()).decode("utf-8")
             return f"data:image/png;base64,{b64_string}"
     except Exception:
         # Jika file logo.png tidak ditemukan, kembalikan string kosong
         # Script akan otomatis mundur (fallback) menggunakan Teks biasa "SATUBUMI"
         return ""
 
+
 def generate_pdf_report(assessment_data: dict) -> bytes:
-    
+
     # Ambil logo menggunakan Base64 anti-gagal
     LOGO_URL = get_local_logo_base64()
-    
+
     template = Template(PDF_HTML_TEMPLATE)
     html_content = template.render(
         logo_url=LOGO_URL,
@@ -309,6 +312,7 @@ def generate_pdf_report(assessment_data: dict) -> bytes:
     # 1) Coba WeasyPrint (Standar Emas)
     try:
         from weasyprint import HTML
+
         return HTML(string=html_content).write_pdf()
     except Exception:
         pass
@@ -316,6 +320,7 @@ def generate_pdf_report(assessment_data: dict) -> bytes:
     # 2) Fallback: xhtml2pdf (Aman)
     try:
         from xhtml2pdf import pisa
+
         buffer = BytesIO()
         result = pisa.CreatePDF(html_content, dest=buffer, encoding="utf-8")
         if result.err:

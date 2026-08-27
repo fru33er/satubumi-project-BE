@@ -1,15 +1,17 @@
+
 from fastapi import APIRouter, status
 from pydantic import BaseModel, EmailStr
-from typing import Optional
 
 router = APIRouter(prefix="/contact", tags=["Contact & Inquiries"])
+
 
 class ContactInquiry(BaseModel):
     name: str
     email: EmailStr
-    company: Optional[str] = None
-    service_interest: Optional[str] = "General Inquiry"
+    company: str | None = None
+    service_interest: str | None = "General Inquiry"
     message: str
+
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def submit_contact(inquiry: ContactInquiry):
@@ -18,5 +20,5 @@ def submit_contact(inquiry: ContactInquiry):
     """
     return {
         "status": "success",
-        "message": f"Terima kasih {inquiry.name}, pesan Anda telah berhasil dikirim ke tim Satubumi."
+        "message": f"Terima kasih {inquiry.name}, pesan Anda telah berhasil dikirim ke tim Satubumi.",
     }

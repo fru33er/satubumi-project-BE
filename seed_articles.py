@@ -1,12 +1,13 @@
 """
 Script Seeder untuk membuat artikel awal Halaman About dan Services di Database Backend
 """
-import sys
+
 import os
+import sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app.core.database import SessionLocal, engine, Base
+from app.core.database import Base, SessionLocal, engine
 from app.models.article import Article
 
 DEFAULT_ARTICLES = [
@@ -17,7 +18,7 @@ DEFAULT_ARTICLES = [
         "author": "Satubumi Team",
         "content": "Satubumi adalah perusahaan konsultansi yang berfokus pada pengembangan solusi iklim dan keberlanjutan melalui pendekatan ilmiah, kolaboratif, dan berbasis dampak.",
         "status": "published",
-        "tags": "about, sustainability"
+        "tags": "about, sustainability",
     },
     {
         "category": "services",
@@ -26,7 +27,7 @@ DEFAULT_ARTICLES = [
         "author": "Advisory Team",
         "content": "Mendampingi klien dalam seluruh tahapan pengembangan proyek karbon, mulai dari kelayakan, perancangan, penyusunan dokumen, hingga MRV.",
         "status": "published",
-        "tags": "services, carbon"
+        "tags": "services, carbon",
     },
     {
         "category": "services",
@@ -35,16 +36,19 @@ DEFAULT_ARTICLES = [
         "author": "Advisory Team",
         "content": "Layanan pengumpulan dan analisis data tutupan lahan, keanekaragaman hayati, dan cadangan karbon.",
         "status": "published",
-        "tags": "services, baseline"
-    }
+        "tags": "services, baseline",
+    },
 ]
+
 
 def seed_articles():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         for art_data in DEFAULT_ARTICLES:
-            existing = db.query(Article).filter(Article.slug == art_data["slug"]).first()
+            existing = (
+                db.query(Article).filter(Article.slug == art_data["slug"]).first()
+            )
             if not existing:
                 new_art = Article(**art_data)
                 db.add(new_art)
@@ -58,6 +62,7 @@ def seed_articles():
         print(f"[ERROR] Seeding artikel gagal: {e}")
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     seed_articles()
