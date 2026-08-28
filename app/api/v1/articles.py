@@ -32,6 +32,14 @@ router = APIRouter(prefix="/articles", tags=["Articles & Content"])
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
+def get_article_author_name(art: Article) -> str:
+    if art.author_user and art.author_user.full_name:
+        return art.author_user.full_name
+
+    if art.author:
+        return art.author
+
+    return "Satubumi Team"
 
 def serialize_article(art: Article, lang: str = "id") -> dict:
     """
@@ -45,7 +53,8 @@ def serialize_article(art: Article, lang: str = "id") -> dict:
         "title": (art.title_en if use_en and art.title_en else art.title),
         "title_en": getattr(art, "title_en", None),
         "slug": art.slug,
-        "author": art.author or "Satubumi Team",
+        "author": get_article_author_name(art),
+        "author_id": art.author_id,
         "author_profile_image": (
             art.author_user.profile_image if art.author_user else None
         ),
@@ -131,24 +140,64 @@ def get_top_insights(
     return [serialize_article(art, lang) for art in articles]
 
 
-@router.get("/insights/top-authors", response_model=list[TopAuthorItem])
+@router.get(
+    "/insights/top-authors",
+    response_model=list[TopAuthorItem],
+)
 def get_top_authors(
-    limit: int = Query(10, ge=1, le=50),
+    limit: int = Query(
+        10,
+        ge=1,
+        le=50
+    ),
     db: Session = Depends(get_db),
 ):
+    author_name = func.coalesce(
+        User.full_name,
+        Article.author,
+        "Satubumi Team",
+    )
+
     rows = (
-        db.query(Article.author, func.count(Article.id).label("count"))
+        db.query(
+            author_name.label("author"),
+            User.profile_image.label(
+                "author_profile_image"
+            ),
+            func.count(
+                Article.id
+            ).label("count"),
+        )
+        .outerjoin(
+            User,
+            Article.author_id == User.id,
+        )
         .filter(
             Article.category == "insight",
             Article.status == "published",
         )
-        .group_by(Article.author)
-        .order_by(desc("count"))
+        .group_by(
+            author_name,
+            User.profile_image,
+        )
+        .order_by(
+            func.count(
+                Article.id
+            ).desc()
+        )
         .limit(limit)
         .all()
     )
+
     return [
-        TopAuthorItem(author=(r.author or "Satubumi Team"), count=r.count) for r in rows
+        TopAuthorItem(
+            author=row.author,
+            count=row.count,
+            author_profile_image=(
+                row.author_profile_image
+            ),
+        )
+        for row in rows
     ]
 
 
@@ -214,9 +263,12 @@ def create_article(
     admin: User = Depends(require_admin),
 ):
     data = article_in.dict()
+    data["author_id"] = admin.id
     if getattr(admin, "full_name", None):
         data["author"] = admin.full_name
-        data["author_id"] = admin.id
+    else:
+        data["author"] = "Satubumi Team"
+        
     data.setdefault("is_featured", False)
     data.setdefault("view_count", 0)
 

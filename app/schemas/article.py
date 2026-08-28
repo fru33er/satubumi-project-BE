@@ -54,6 +54,7 @@ class ArticleResponse(ArticleBase):
 class TopAuthorItem(BaseModel):
     author: str
     count: int
+    author_profile_image: str | None = None
 
 
 class TopicItem(BaseModel):
