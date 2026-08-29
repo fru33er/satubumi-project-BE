@@ -7,7 +7,6 @@ from fastapi import (
     File,
     HTTPException,
     Query,
-    Request,
     UploadFile,
     status,
 )
@@ -17,6 +16,11 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import require_admin
+from app.core.storage import (
+    delete_public_file,
+    extract_public_storage_path,
+    upload_public_file,
+)
 from app.models.article import Article
 from app.models.user import User
 from app.schemas.article import (
@@ -303,18 +307,49 @@ def update_article(
     return serialize_article(art, "id")
 
 
-@router.delete("/{article_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{article_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 def delete_article(
     article_id: int,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    art = db.query(Article).filter(Article.id == article_id).first()
+    art = (
+        db.query(Article)
+        .filter(Article.id == article_id)
+        .first()
+    )
+
     if not art:
-        raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
+        raise HTTPException(
+            status_code=404,
+            detail="Artikel tidak ditemukan.",
+        )
 
     if art.image_url:
-        _delete_image_file(art.image_url)
+        storage_path = (
+            extract_public_storage_path(
+                art.image_url
+            )
+        )
+
+        if storage_path:
+            try:
+                delete_public_file(
+                    storage_path
+                )
+            except Exception as exc:
+                print(
+                    "Supabase delete error:",
+                    exc,
+                )
+
+        else:
+            _delete_image_file(
+                art.image_url
+            )
 
     db.delete(art)
     db.commit()
@@ -332,45 +367,129 @@ def delete_article(
 )
 async def upload_article_image(
     article_id: int,
-    request: Request,
-    file: UploadFile = File(..., description="jpg, jpeg, png, webp. Maks 5 MB."),
+    file: UploadFile = File(
+        ...,
+        description="jpg, jpeg, png, webp. Maks 5 MB.",
+    ),
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    art = db.query(Article).filter(Article.id == article_id).first()
+    art = (
+        db.query(Article)
+        .filter(Article.id == article_id)
+        .first()
+    )
+
     if not art:
-        raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
-
-    content_type = file.content_type or ""
-    ext = os.path.splitext(file.filename or "")[1].lower()
-
-    if content_type not in ALLOWED_IMAGE_TYPES or ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
-            status_code=400,
-            detail="Format file tidak didukung. Gunakan: jpg, jpeg, png, atau webp.",
+            status_code=404,
+            detail="Artikel tidak ditemukan.",
         )
 
-    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    content_type = file.content_type or ""
+
+    ext = os.path.splitext(
+        file.filename or ""
+    )[1].lower()
+
+    if (
+        content_type not in ALLOWED_IMAGE_TYPES
+        or ext not in ALLOWED_EXTENSIONS
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Format file tidak didukung. "
+                "Gunakan: jpg, jpeg, png, atau webp."
+            ),
+        )
+
+    max_bytes = (
+        settings.MAX_UPLOAD_SIZE_MB
+        * 1024
+        * 1024
+    )
+
     contents = await file.read()
+
     if len(contents) > max_bytes:
         raise HTTPException(
             status_code=400,
-            detail=f"Ukuran file melebihi batas maksimal {settings.MAX_UPLOAD_SIZE_MB} MB.",
+            detail=(
+                "Ukuran file melebihi batas maksimal "
+                f"{settings.MAX_UPLOAD_SIZE_MB} MB."
+            ),
         )
 
+    # ==============================
+    # HAPUS GAMBAR SUPABASE LAMA
+    # ==============================
+
     if art.image_url:
-        _delete_image_file(art.image_url)
+        old_storage_path = (
+            extract_public_storage_path(
+                art.image_url
+            )
+        )
 
-    unique_filename = f"{uuid.uuid4().hex}{ext}"
-    upload_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
-    with open(upload_path, "wb") as f:
-        f.write(contents)
+        if old_storage_path:
+            try:
+                delete_public_file(
+                    old_storage_path
+                )
+            except Exception as exc:
+                print(
+                    "Gagal menghapus gambar lama "
+                    "dari Supabase:",
+                    exc,
+                )
 
-    base_url = str(request.base_url).rstrip("/")
-    art.image_url = f"{base_url}/static/uploads/{unique_filename}"
+    # ==============================
+    # UPLOAD GAMBAR BARU
+    # ==============================
+
+    unique_filename = (
+        f"{uuid.uuid4().hex}{ext}"
+    )
+
+    storage_path = (
+        f"articles/{unique_filename}"
+    )
+
+    try:
+        public_url = upload_public_file(
+            path=storage_path,
+            file_bytes=contents,
+            content_type=content_type,
+        )
+
+    except Exception as exc:
+        print(
+            "Supabase upload error:",
+            exc,
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Gagal mengupload gambar "
+                "ke Supabase Storage."
+            ),
+        )
+
+    # ==============================
+    # SIMPAN PUBLIC URL
+    # ==============================
+
+    art.image_url = public_url
+
     db.commit()
     db.refresh(art)
-    return serialize_article(art, "id")
+
+    return serialize_article(
+        art,
+        "id",
+    )
 
 
 @router.delete(
@@ -383,16 +502,56 @@ def delete_article_image(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    art = db.query(Article).filter(Article.id == article_id).first()
+    art = (
+        db.query(Article)
+        .filter(Article.id == article_id)
+        .first()
+    )
+
     if not art:
-        raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
-    if not art.image_url:
         raise HTTPException(
-            status_code=404, detail="Artikel ini tidak memiliki gambar."
+            status_code=404,
+            detail="Artikel tidak ditemukan.",
         )
 
-    _delete_image_file(art.image_url)
+    if not art.image_url:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Artikel ini tidak memiliki gambar."
+            ),
+        )
+
+    storage_path = (
+        extract_public_storage_path(
+            art.image_url
+        )
+    )
+
+    if storage_path:
+        try:
+            delete_public_file(
+                storage_path
+            )
+        except Exception as exc:
+            print(
+                "Supabase delete error:",
+                exc,
+            )
+
+    else:
+        # Untuk gambar artikel lama
+        # yang masih berada di Render.
+        _delete_image_file(
+            art.image_url
+        )
+
     art.image_url = None
+
     db.commit()
     db.refresh(art)
-    return serialize_article(art, "id")
+
+    return serialize_article(
+        art,
+        "id",
+    )
