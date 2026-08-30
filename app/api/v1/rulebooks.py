@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import require_admin
+from app.core.activity import create_activity_log
 from app.models.rulebook import Rulebook
 from app.models.rulebook_download import RulebookDownload
 from app.models.user import User
@@ -28,7 +29,6 @@ router = APIRouter(
     tags=["Rulebooks"],
 )
 
-
 RULEBOOK_UPLOAD_DIR = "static/rulebooks"
 
 ALLOWED_PDF_TYPES = {
@@ -37,11 +37,7 @@ ALLOWED_PDF_TYPES = {
 
 MAX_PDF_SIZE = 25 * 1024 * 1024
 
-
-os.makedirs(
-    RULEBOOK_UPLOAD_DIR,
-    exist_ok=True,
-)
+os.makedirs(RULEBOOK_UPLOAD_DIR, exist_ok=True)
 
 
 def serialize_rulebook(rulebook: Rulebook):
@@ -64,15 +60,10 @@ def delete_rulebook_file(file_url: str | None):
 
     try:
         filename = file_url.split("/")[-1]
-
-        file_path = os.path.join(
-            RULEBOOK_UPLOAD_DIR,
-            filename,
-        )
+        file_path = os.path.join(RULEBOOK_UPLOAD_DIR, filename)
 
         if os.path.isfile(file_path):
             os.remove(file_path)
-
     except Exception:
         pass
 
@@ -82,26 +73,18 @@ def delete_rulebook_file(file_url: str | None):
 # =========================================================
 
 
-@router.get(
-    "/",
-    response_model=list[RulebookResponse],
-)
-def list_rulebooks(
-    db: Session = Depends(get_db),
-):
+@router.get("/", response_model=list[RulebookResponse])
+def list_rulebooks(db: Session = Depends(get_db)):
     rulebooks = (
         db.query(Rulebook)
         .filter(Rulebook.status == "published")
         .order_by(Rulebook.created_at.desc())
         .all()
     )
-
     return [serialize_rulebook(item) for item in rulebooks]
 
 
-@router.post(
-    "/{rulebook_id}/download",
-)
+@router.post("/{rulebook_id}/download")
 def download_rulebook(
     rulebook_id: int,
     data: RulebookDownloadCreate,
@@ -110,16 +93,10 @@ def download_rulebook(
     rulebook = db.query(Rulebook).filter(Rulebook.id == rulebook_id).first()
 
     if not rulebook:
-        raise HTTPException(
-            status_code=404,
-            detail="Rulebook tidak ditemukan.",
-        )
+        raise HTTPException(status_code=404, detail="Rulebook tidak ditemukan.")
 
     if rulebook.status != "published":
-        raise HTTPException(
-            status_code=404,
-            detail="Rulebook tidak tersedia.",
-        )
+        raise HTTPException(status_code=404, detail="Rulebook tidak tersedia.")
 
     download = RulebookDownload(
         rulebook_id=rulebook.id,
@@ -130,9 +107,7 @@ def download_rulebook(
     )
 
     db.add(download)
-
     rulebook.download_count = (rulebook.download_count or 0) + 1
-
     db.commit()
 
     return {
@@ -146,16 +121,12 @@ def download_rulebook(
 # =========================================================
 
 
-@router.get(
-    "/admin/all",
-    response_model=list[RulebookResponse],
-)
+@router.get("/admin/all", response_model=list[RulebookResponse])
 def admin_list_rulebooks(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
     rulebooks = db.query(Rulebook).order_by(Rulebook.created_at.desc()).all()
-
     return [serialize_rulebook(item) for item in rulebooks]
 
 
@@ -168,31 +139,21 @@ async def upload_rulebook(
     request: Request,
     title: str = Form(...),
     description: str = Form(""),
-    status_value: str = Form(
-        "published",
-        alias="status",
-    ),
+    status_value: str = Form("published", alias="status"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    if status_value not in {
-        "published",
-        "draft",
-    }:
+    if status_value not in {"published", "draft"}:
         raise HTTPException(
             status_code=400,
             detail="Status harus published atau draft.",
         )
 
     if file.content_type not in ALLOWED_PDF_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail="File harus berformat PDF.",
-        )
+        raise HTTPException(status_code=400, detail="File harus berformat PDF.")
 
     extension = os.path.splitext(file.filename or "")[1].lower()
-
     if extension != ".pdf":
         raise HTTPException(
             status_code=400,
@@ -202,26 +163,15 @@ async def upload_rulebook(
     contents = await file.read()
 
     if len(contents) > MAX_PDF_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail="Ukuran PDF maksimal 25MB.",
-        )
+        raise HTTPException(status_code=400, detail="Ukuran PDF maksimal 25MB.")
 
     unique_filename = f"{uuid.uuid4().hex}.pdf"
+    file_path = os.path.join(RULEBOOK_UPLOAD_DIR, unique_filename)
 
-    file_path = os.path.join(
-        RULEBOOK_UPLOAD_DIR,
-        unique_filename,
-    )
-
-    with open(
-        file_path,
-        "wb",
-    ) as buffer:
+    with open(file_path, "wb") as buffer:
         buffer.write(contents)
 
     base_url = str(request.base_url).rstrip("/")
-
     file_url = f"{base_url}/static/rulebooks/{unique_filename}"
 
     rulebook = Rulebook(
@@ -233,63 +183,65 @@ async def upload_rulebook(
     )
 
     db.add(rulebook)
+    db.flush()
+
+    create_activity_log(
+        db=db,
+        user=admin,
+        action="UPLOAD",
+        module="RULEBOOK",
+        target_id=rulebook.id,
+        target_name=rulebook.title,
+        description="Upload rulebook PDF",
+    )
 
     db.commit()
-
     db.refresh(rulebook)
 
     return serialize_rulebook(rulebook)
 
 
-@router.put(
-    "/admin/{rulebook_id}",
-    response_model=RulebookResponse,
-)
+@router.put("/admin/{rulebook_id}", response_model=RulebookResponse)
 def update_rulebook(
     rulebook_id: int,
     title: str = Form(...),
     description: str = Form(""),
-    status_value: str = Form(
-        "published",
-        alias="status",
-    ),
+    status_value: str = Form("published", alias="status"),
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
     rulebook = db.query(Rulebook).filter(Rulebook.id == rulebook_id).first()
 
     if not rulebook:
-        raise HTTPException(
-            status_code=404,
-            detail="Rulebook tidak ditemukan.",
-        )
+        raise HTTPException(status_code=404, detail="Rulebook tidak ditemukan.")
 
-    if status_value not in {
-        "published",
-        "draft",
-    }:
+    if status_value not in {"published", "draft"}:
         raise HTTPException(
             status_code=400,
             detail="Status harus published atau draft.",
         )
 
     rulebook.title = title.strip()
-
     rulebook.description = description.strip() if description else None
-
     rulebook.status = status_value
 
-    db.commit()
+    create_activity_log(
+        db=db,
+        user=admin,
+        action="UPDATE",
+        module="RULEBOOK",
+        target_id=rulebook.id,
+        target_name=rulebook.title,
+        description="Mengubah rulebook",
+    )
 
+    db.commit()
     db.refresh(rulebook)
 
     return serialize_rulebook(rulebook)
 
 
-@router.delete(
-    "/admin/{rulebook_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
+@router.delete("/admin/{rulebook_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_rulebook(
     rulebook_id: int,
     db: Session = Depends(get_db),
@@ -298,10 +250,17 @@ def delete_rulebook(
     rulebook = db.query(Rulebook).filter(Rulebook.id == rulebook_id).first()
 
     if not rulebook:
-        raise HTTPException(
-            status_code=404,
-            detail="Rulebook tidak ditemukan.",
-        )
+        raise HTTPException(status_code=404, detail="Rulebook tidak ditemukan.")
+
+    create_activity_log(
+        db=db,
+        user=admin,
+        action="DELETE",
+        module="RULEBOOK",
+        target_id=rulebook.id,
+        target_name=rulebook.title,
+        description="Menghapus rulebook",
+    )
 
     delete_rulebook_file(rulebook.file_url)
 
@@ -310,13 +269,10 @@ def delete_rulebook(
     ).delete(synchronize_session=False)
 
     db.delete(rulebook)
-
     db.commit()
 
 
-@router.get(
-    "/admin/{rulebook_id}/downloads",
-)
+@router.get("/admin/{rulebook_id}/downloads")
 def rulebook_downloads(
     rulebook_id: int,
     db: Session = Depends(get_db),
@@ -325,10 +281,7 @@ def rulebook_downloads(
     rulebook = db.query(Rulebook).filter(Rulebook.id == rulebook_id).first()
 
     if not rulebook:
-        raise HTTPException(
-            status_code=404,
-            detail="Rulebook tidak ditemukan.",
-        )
+        raise HTTPException(status_code=404, detail="Rulebook tidak ditemukan.")
 
     downloads = (
         db.query(RulebookDownload)

@@ -13,6 +13,7 @@ from fastapi import (
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
+from app.core.activity import create_activity_log
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import require_admin
@@ -36,19 +37,19 @@ router = APIRouter(prefix="/articles", tags=["Articles & Content"])
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
+
 def get_article_author_name(art: Article) -> str:
     if art.author_user and art.author_user.full_name:
         return art.author_user.full_name
-
     if art.author:
         return art.author
-
     return "Satubumi Team"
+
 
 def serialize_article(art: Article, lang: str = "id") -> dict:
     """
-    lang=id → title/content Indonesia
-    lang=en → title_en/content_en (fallback ke ID jika kosong)
+    lang=id -> title/content Indonesia
+    lang=en -> title_en/content_en (fallback ke ID jika kosong)
     """
     use_en = lang == "en"
     return {
@@ -149,11 +150,7 @@ def get_top_insights(
     response_model=list[TopAuthorItem],
 )
 def get_top_authors(
-    limit: int = Query(
-        10,
-        ge=1,
-        le=50
-    ),
+    limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
     author_name = func.coalesce(
@@ -165,12 +162,8 @@ def get_top_authors(
     rows = (
         db.query(
             author_name.label("author"),
-            User.profile_image.label(
-                "author_profile_image"
-            ),
-            func.count(
-                Article.id
-            ).label("count"),
+            User.profile_image.label("author_profile_image"),
+            func.count(Article.id).label("count"),
         )
         .outerjoin(
             User,
@@ -184,11 +177,7 @@ def get_top_authors(
             author_name,
             User.profile_image,
         )
-        .order_by(
-            func.count(
-                Article.id
-            ).desc()
-        )
+        .order_by(func.count(Article.id).desc())
         .limit(limit)
         .all()
     )
@@ -197,9 +186,7 @@ def get_top_authors(
         TopAuthorItem(
             author=row.author,
             count=row.count,
-            author_profile_image=(
-                row.author_profile_image
-            ),
+            author_profile_image=row.author_profile_image,
         )
         for row in rows
     ]
@@ -272,7 +259,7 @@ def create_article(
         data["author"] = admin.full_name
     else:
         data["author"] = "Satubumi Team"
-        
+
     data.setdefault("is_featured", False)
     data.setdefault("view_count", 0)
 
@@ -281,6 +268,18 @@ def create_article(
 
     new_art = Article(**payload)
     db.add(new_art)
+    db.flush()
+
+    create_activity_log(
+        db=db,
+        user=admin,
+        action="CREATE",
+        module="ARTICLE",
+        target_id=new_art.id,
+        target_name=new_art.title,
+        description="Membuat artikel baru",
+    )
+
     db.commit()
     db.refresh(new_art)
     return serialize_article(new_art, "id")
@@ -302,6 +301,16 @@ def update_article(
         if key in allowed:
             setattr(art, key, value)
 
+    create_activity_log(
+        db=db,
+        user=admin,
+        action="UPDATE",
+        module="ARTICLE",
+        target_id=art.id,
+        target_name=art.title,
+        description="Mengubah artikel",
+    )
+
     db.commit()
     db.refresh(art)
     return serialize_article(art, "id")
@@ -316,12 +325,7 @@ def delete_article(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    art = (
-        db.query(Article)
-        .filter(Article.id == article_id)
-        .first()
-    )
-
+    art = db.query(Article).filter(Article.id == article_id).first()
     if not art:
         raise HTTPException(
             status_code=404,
@@ -329,30 +333,28 @@ def delete_article(
         )
 
     if art.image_url:
-        storage_path = (
-            extract_public_storage_path(
-                art.image_url
-            )
-        )
-
+        storage_path = extract_public_storage_path(art.image_url)
         if storage_path:
             try:
-                delete_public_file(
-                    storage_path
-                )
+                delete_public_file(storage_path)
             except Exception as exc:
-                print(
-                    "Supabase delete error:",
-                    exc,
-                )
-
+                print("Supabase delete error:", exc)
         else:
-            _delete_image_file(
-                art.image_url
-            )
+            _delete_image_file(art.image_url)
+
+    create_activity_log(
+        db=db,
+        user=admin,
+        action="DELETE",
+        module="ARTICLE",
+        target_id=art.id,
+        target_name=art.title,
+        description="Menghapus artikel",
+    )
 
     db.delete(art)
     db.commit()
+    return None
 
 
 # ──────────────────────────────────────────────
@@ -374,12 +376,7 @@ async def upload_article_image(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    art = (
-        db.query(Article)
-        .filter(Article.id == article_id)
-        .first()
-    )
-
+    art = db.query(Article).filter(Article.id == article_id).first()
     if not art:
         raise HTTPException(
             status_code=404,
@@ -387,10 +384,7 @@ async def upload_article_image(
         )
 
     content_type = file.content_type or ""
-
-    ext = os.path.splitext(
-        file.filename or ""
-    )[1].lower()
+    ext = os.path.splitext(file.filename or "")[1].lower()
 
     if (
         content_type not in ALLOWED_IMAGE_TYPES
@@ -404,57 +398,33 @@ async def upload_article_image(
             ),
         )
 
-    max_bytes = (
-        settings.MAX_UPLOAD_SIZE_MB
-        * 1024
-        * 1024
-    )
-
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
     contents = await file.read()
 
     if len(contents) > max_bytes:
         raise HTTPException(
             status_code=400,
             detail=(
-                "Ukuran file melebihi batas maksimal "
-                f"{settings.MAX_UPLOAD_SIZE_MB} MB."
+                f"Ukuran file melebihi batas maksimal {settings.MAX_UPLOAD_SIZE_MB} MB."
             ),
         )
 
     # ==============================
     # HAPUS GAMBAR SUPABASE LAMA
     # ==============================
-
     if art.image_url:
-        old_storage_path = (
-            extract_public_storage_path(
-                art.image_url
-            )
-        )
-
+        old_storage_path = extract_public_storage_path(art.image_url)
         if old_storage_path:
             try:
-                delete_public_file(
-                    old_storage_path
-                )
+                delete_public_file(old_storage_path)
             except Exception as exc:
-                print(
-                    "Gagal menghapus gambar lama "
-                    "dari Supabase:",
-                    exc,
-                )
+                print("Gagal menghapus gambar lama dari Supabase:", exc)
 
     # ==============================
     # UPLOAD GAMBAR BARU
     # ==============================
-
-    unique_filename = (
-        f"{uuid.uuid4().hex}{ext}"
-    )
-
-    storage_path = (
-        f"articles/{unique_filename}"
-    )
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+    storage_path = f"articles/{unique_filename}"
 
     try:
         public_url = upload_public_file(
@@ -462,34 +432,31 @@ async def upload_article_image(
             file_bytes=contents,
             content_type=content_type,
         )
-
     except Exception as exc:
-        print(
-            "Supabase upload error:",
-            exc,
-        )
-
+        print("Supabase upload error:", exc)
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Gagal mengupload gambar "
-                "ke Supabase Storage."
-            ),
+            detail="Gagal mengupload gambar ke Supabase Storage.",
         )
 
     # ==============================
     # SIMPAN PUBLIC URL
     # ==============================
-
     art.image_url = public_url
+
+    create_activity_log(
+        db=db,
+        user=admin,
+        action="UPLOAD",
+        module="ARTICLE_IMAGE",
+        target_id=art.id,
+        target_name=art.title,
+        description="Mengubah gambar artikel",
+    )
 
     db.commit()
     db.refresh(art)
-
-    return serialize_article(
-        art,
-        "id",
-    )
+    return serialize_article(art, "id")
 
 
 @router.delete(
@@ -502,12 +469,7 @@ def delete_article_image(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    art = (
-        db.query(Article)
-        .filter(Article.id == article_id)
-        .first()
-    )
-
+    art = db.query(Article).filter(Article.id == article_id).first()
     if not art:
         raise HTTPException(
             status_code=404,
@@ -517,41 +479,31 @@ def delete_article_image(
     if not art.image_url:
         raise HTTPException(
             status_code=404,
-            detail=(
-                "Artikel ini tidak memiliki gambar."
-            ),
+            detail="Artikel ini tidak memiliki gambar.",
         )
 
-    storage_path = (
-        extract_public_storage_path(
-            art.image_url
-        )
-    )
-
+    storage_path = extract_public_storage_path(art.image_url)
     if storage_path:
         try:
-            delete_public_file(
-                storage_path
-            )
+            delete_public_file(storage_path)
         except Exception as exc:
-            print(
-                "Supabase delete error:",
-                exc,
-            )
-
+            print("Supabase delete error:", exc)
     else:
-        # Untuk gambar artikel lama
-        # yang masih berada di Render.
-        _delete_image_file(
-            art.image_url
-        )
+        # Untuk gambar artikel lama yang masih berada di Render lokal
+        _delete_image_file(art.image_url)
 
     art.image_url = None
 
+    create_activity_log(
+        db=db,
+        user=admin,
+        action="DELETE",
+        module="ARTICLE_IMAGE",
+        target_id=art.id,
+        target_name=art.title,
+        description="Menghapus gambar artikel",
+    )
+
     db.commit()
     db.refresh(art)
-
-    return serialize_article(
-        art,
-        "id",
-    )
+    return serialize_article(art, "id")

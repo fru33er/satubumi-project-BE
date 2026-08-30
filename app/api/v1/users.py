@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dependencies import require_super_admin
 from app.core.security import get_password_hash
+from app.core.activity import create_activity_log
 from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
-# Role yang diizinkan di sistem
 ALLOWED_ROLES = {"admin", "super_admin", "client"}
 
 router = APIRouter(prefix="/users", tags=["User Management (Super Admin Only)"])
@@ -18,9 +18,9 @@ router = APIRouter(prefix="/users", tags=["User Management (Super Admin Only)"])
 
 @router.get("/", response_model=list[UserResponse])
 def list_users(
-    db: Session = Depends(get_db), super_admin: User = Depends(require_super_admin)
+    db: Session = Depends(get_db),
+    super_admin: User = Depends(require_super_admin),
 ):
-    """[Super Admin Only] Ambil semua daftar pengguna"""
     return db.query(User).all()
 
 
@@ -30,12 +30,12 @@ def create_user(
     db: Session = Depends(get_db),
     super_admin: User = Depends(require_super_admin),
 ):
-    """[Super Admin Only] Buat akun user baru (admin / super_admin / client)"""
     if user_in.role and user_in.role not in ALLOWED_ROLES:
         raise HTTPException(
             status_code=400,
             detail=f"Role tidak valid. Pilihan: {', '.join(ALLOWED_ROLES)}",
         )
+
     existing = db.query(User).filter(User.email == user_in.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email sudah terdaftar.")
@@ -47,9 +47,23 @@ def create_user(
         phone_number=user_in.phone_number,
         role=user_in.role or "admin",
     )
+
     db.add(new_user)
+    db.flush()
+
+    create_activity_log(
+        db=db,
+        user=super_admin,
+        action="CREATE",
+        module="USER",
+        target_id=new_user.id,
+        target_name=new_user.full_name,
+        description="Membuat akun user baru",
+    )
+
     db.commit()
     db.refresh(new_user)
+
     return new_user
 
 
@@ -59,7 +73,6 @@ def get_user(
     db: Session = Depends(get_db),
     super_admin: User = Depends(require_super_admin),
 ):
-    """[Super Admin Only] Ambil detail satu user berdasarkan ID"""
     usr = db.query(User).filter(User.id == user_id).first()
     if not usr:
         raise HTTPException(status_code=404, detail="User tidak ditemukan.")
@@ -73,7 +86,6 @@ def update_user(
     db: Session = Depends(get_db),
     super_admin: User = Depends(require_super_admin),
 ):
-    """[Super Admin Only] Update data user (email, nama, role, password, dll)"""
     usr = db.query(User).filter(User.id == user_id).first()
     if not usr:
         raise HTTPException(status_code=404, detail="User tidak ditemukan.")
@@ -86,7 +98,6 @@ def update_user(
 
     update_data = user_in.model_dump(exclude_unset=True)
 
-    # Email baru harus unik
     if "email" in update_data and update_data["email"] != usr.email:
         taken = (
             db.query(User)
@@ -102,6 +113,16 @@ def update_user(
     for field, value in update_data.items():
         setattr(usr, field, value)
 
+    create_activity_log(
+        db=db,
+        user=super_admin,
+        action="UPDATE",
+        module="USER",
+        target_id=usr.id,
+        target_name=usr.full_name,
+        description="Mengubah data user",
+    )
+
     db.commit()
     db.refresh(usr)
     return usr
@@ -113,10 +134,20 @@ def delete_user(
     db: Session = Depends(get_db),
     super_admin: User = Depends(require_super_admin),
 ):
-    """[Super Admin Only] Hapus akun user"""
     usr = db.query(User).filter(User.id == user_id).first()
     if not usr:
         raise HTTPException(status_code=404, detail="User tidak ditemukan.")
+
+    create_activity_log(
+        db=db,
+        user=super_admin,
+        action="DELETE",
+        module="USER",
+        target_id=usr.id,
+        target_name=usr.full_name,
+        description="Menghapus user",
+    )
+
     db.delete(usr)
     db.commit()
 
@@ -128,18 +159,15 @@ async def upload_profile_image(
     db: Session = Depends(get_db),
     super_admin: User = Depends(require_super_admin),
 ):
-
     usr = db.query(User).filter(User.id == user_id).first()
 
     if not usr:
         raise HTTPException(status_code=404, detail="User tidak ditemukan.")
 
     upload_dir = "static/profile"
-
     os.makedirs(upload_dir, exist_ok=True)
 
     filename = f"user_{usr.id}_{file.filename}"
-
     file_path = f"{upload_dir}/{filename}"
 
     with open(file_path, "wb") as buffer:
@@ -147,8 +175,17 @@ async def upload_profile_image(
 
     usr.profile_image = "/" + file_path
 
-    db.commit()
+    create_activity_log(
+        db=db,
+        user=super_admin,
+        action="UPLOAD",
+        module="USER",
+        target_id=usr.id,
+        target_name=usr.full_name,
+        description="Mengubah foto profil user",
+    )
 
+    db.commit()
     db.refresh(usr)
 
     return {"message": "Profile image updated", "profile_image": usr.profile_image}

@@ -14,6 +14,8 @@ from app.api.v1.projects import router as projects_router  # SATUBUMI MONITOR
 from app.api.v1.rapid_fs import router as rapid_fs_router
 from app.api.v1.reports import router as reports_router
 from app.api.v1.users import router as users_router
+from app.api.v1 import team_member
+from app.api.v1 import activity
 from app.core.config import settings
 from app.core.database import Base, engine
 
@@ -58,9 +60,11 @@ app.include_router(rulebooks.router, prefix="/api/v1")
 app.include_router(
     projects_router, prefix=api_v1_prefix
 )  # SATUBUMI MONITOR — CRUD Proyek
+app.include_router(team_member.router,prefix="/api/v1")
 app.include_router(
     monitor_router, prefix=api_v1_prefix
 )  # SATUBUMI MONITOR — Data Sub-modul
+app.include_router(activity.router,prefix="/api/v1")
 
 
 @app.get("/")
