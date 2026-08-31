@@ -1,53 +1,87 @@
-from datetime import date as DateType, datetime as DateTimeType
-from typing import Any
-
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
+from datetime import datetime, date
+
 
 # ─────────────────────────────────────────────
 # PROJECT ACTIVITY
 # ─────────────────────────────────────────────
 
-
 class ActivityCreate(BaseModel):
     """Request body untuk mencatat kegiatan proyek baru."""
-
     activity_type: str = Field(
         ...,
-        description="Jenis kegiatan: planting, restoration, biodiversity_survey, community_development, fire_prevention, forest_protection",
+        description="Jenis kegiatan: planting, restoration, biodiversity_survey, community_development, fire_prevention, forest_protection"
     )
-    activity_date: DateType = Field(..., description="Tanggal kegiatan")
-    location_geojson: dict[str, Any] | None = Field(
-        None, description="Lokasi kegiatan (GeoJSON Point/Polygon)"
-    )
-    target: float | None = Field(None, description="Target kegiatan")
-    realization: float | None = Field(None, description="Realisasi kegiatan")
-    unit: str | None = Field(
-        None, max_length=50, description="Satuan: ha, trees, person, dll"
-    )
-    executor: str | None = Field(
-        None, max_length=255, description="Nama pelaksana/tim"
-    )
-    photo_urls: list[str] | None = Field(
-        None, description="List URL foto dokumentasi"
-    )
-    notes: str | None = Field(None, description="Catatan tambahan")
+    activity_date: date = Field(..., description="Tanggal kegiatan")
+    location_geojson: Optional[Dict[str, Any]] = Field(None, description="Lokasi kegiatan (GeoJSON Point/Polygon)")
+    target: Optional[float] = Field(None, description="Target kegiatan")
+    realization: Optional[float] = Field(None, description="Realisasi kegiatan")
+    unit: Optional[str] = Field(None, max_length=50, description="Satuan: ha, trees, person, dll")
+    executor: Optional[str] = Field(None, max_length=255, description="Nama pelaksana/tim")
+    photo_urls: Optional[List[str]] = Field(None, description="List URL foto dokumentasi")
+    notes: Optional[str] = Field(None, description="Catatan tambahan")
 
 
 class ActivityResponse(BaseModel):
     id: int
     project_id: int
     activity_type: str
-    activity_date: DateType
-    location_geojson: dict[str, Any] | None = None
-    target: float | None = None
-    realization: float | None = None
-    unit: str | None = None
-    executor: str | None = None
-    photo_urls: list[str] | None = None
-    notes: str | None = None
-    created_by: int | None = None
-    created_at: DateTimeType
-    updated_at: DateTimeType
+    activity_date: date
+    location_geojson: Optional[Dict[str, Any]] = None
+    target: Optional[float] = None
+    realization: Optional[float] = None
+    unit: Optional[str] = None
+    executor: Optional[str] = None
+    photo_urls: Optional[List[str]] = None
+    notes: Optional[str] = None
+    created_by: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────────
+# MONITORING PLOT
+# ─────────────────────────────────────────────
+
+class MonitoringPlotCreate(BaseModel):
+    """Request body untuk membuat plot monitoring baru."""
+    plot_code: str = Field(..., max_length=100, description="Kode unik plot, misal WK-023")
+    plot_name: Optional[str] = Field(None, max_length=255, description="Nama deskriptif plot")
+    plot_type: Optional[str] = Field(None, max_length=50, description="Tipe plot: permanent_plot, transect, point")
+    location_geojson: Optional[Dict[str, Any]] = Field(None, description="GeoJSON Point atau Polygon lokasi plot")
+    area_ha: Optional[float] = Field(None, gt=0, description="Luas plot dalam ha")
+    status: Optional[str] = Field("active", max_length=50, description="Status: active, inactive")
+    notes: Optional[str] = Field(None, description="Catatan tambahan")
+
+
+class MonitoringPlotUpdate(BaseModel):
+    """Request body untuk mengupdate plot monitoring."""
+    plot_code: Optional[str] = Field(None, max_length=100)
+    plot_name: Optional[str] = Field(None, max_length=255)
+    plot_type: Optional[str] = Field(None, max_length=50)
+    location_geojson: Optional[Dict[str, Any]] = None
+    area_ha: Optional[float] = Field(None, gt=0)
+    status: Optional[str] = Field(None, max_length=50)
+    notes: Optional[str] = None
+
+
+class MonitoringPlotResponse(BaseModel):
+    """Response data plot monitoring."""
+    id: int
+    project_id: int
+    plot_code: str
+    plot_name: Optional[str] = None
+    plot_type: Optional[str] = None
+    location_geojson: Optional[Dict[str, Any]] = None
+    area_ha: Optional[float] = None
+    status: str
+    notes: Optional[str] = None
+    created_by: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -56,66 +90,55 @@ class ActivityResponse(BaseModel):
 # TREE RECORD
 # ─────────────────────────────────────────────
 
-
 class TreeRecordCreate(BaseModel):
     """Request body untuk menambah data tanam pohon."""
-
-    plot_id: str | None = Field(
-        None, max_length=100, description="Kode plot, misal WK-023"
-    )
+    plot_id: Optional[str] = Field(None, max_length=100, description="Kode plot, misal WK-023")
     species: str = Field(..., max_length=255, description="Jenis/spesies pohon")
     quantity: int = Field(..., gt=0, description="Jumlah pohon dalam batch ini")
-    planting_date: DateType = Field(..., description="Tanggal penanaman")
-    location_geojson: dict[str, Any] | None = Field(
-        None, description="Lokasi plot (GeoJSON Point)"
-    )
-    condition: str | None = Field(
-        "healthy", description="Kondisi: healthy, stressed, dead"
-    )
-    height_cm: float | None = Field(None, description="Tinggi pohon (cm)")
-    dbh_cm: float | None = Field(None, description="Diameter Breast Height (cm)")
-    is_alive: bool | None = Field(True, description="Status hidup pohon")
-    photo_urls: list[str] | None = Field(None, description="List URL foto")
-    notes: str | None = None
+    planting_date: date = Field(..., description="Tanggal penanaman")
+    location_geojson: Optional[Dict[str, Any]] = Field(None, description="Lokasi plot (GeoJSON Point)")
+    condition: Optional[str] = Field("healthy", description="Kondisi: healthy, stressed, dead")
+    height_cm: Optional[float] = Field(None, description="Tinggi pohon (cm)")
+    dbh_cm: Optional[float] = Field(None, description="Diameter Breast Height (cm)")
+    is_alive: Optional[bool] = Field(True, description="Status hidup pohon")
+    photo_urls: Optional[List[str]] = Field(None, description="List URL foto")
+    notes: Optional[str] = None
 
 
 class TreeRecordUpdate(BaseModel):
     """Request body untuk update kondisi pohon (monitoring berkala)."""
-
-    condition: str | None = Field(
-        None, description="Kondisi: healthy, stressed, dead"
-    )
-    height_cm: float | None = None
-    dbh_cm: float | None = None
-    is_alive: bool | None = None
-    photo_urls: list[str] | None = None
-    notes: str | None = None
+    condition: Optional[str] = Field(None, description="Kondisi: healthy, stressed, dead")
+    height_cm: Optional[float] = None
+    dbh_cm: Optional[float] = None
+    is_alive: Optional[bool] = None
+    photo_urls: Optional[List[str]] = None
+    notes: Optional[str] = None
 
 
 class TreeRecordResponse(BaseModel):
     id: int
     project_id: int
-    plot_id: str | None = None
+    plot_id: Optional[str] = None
     species: str
     quantity: int
-    planting_date: DateType
-    location_geojson: dict[str, Any] | None = None
+    planting_date: date
+    location_geojson: Optional[Dict[str, Any]] = None
     condition: str
-    height_cm: float | None = None
-    dbh_cm: float | None = None
+    height_cm: Optional[float] = None
+    dbh_cm: Optional[float] = None
     is_alive: bool
-    photo_urls: list[str] | None = None
-    notes: str | None = None
-    last_monitored: DateTimeType | None = None
-    created_at: DateTimeType
-    updated_at: DateTimeType
+    photo_urls: Optional[List[str]] = None
+    notes: Optional[str] = None
+    last_monitored: Optional[datetime] = None
+    created_by: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 
 
 class TreeSummary(BaseModel):
     """Agregat statistik pohon untuk dashboard."""
-
     trees_planted: int
     trees_survived: int
     trees_dead: int
@@ -124,49 +147,105 @@ class TreeSummary(BaseModel):
 
 
 # ─────────────────────────────────────────────
+# TREE MEASUREMENT (Growth Tracking)
+# ─────────────────────────────────────────────
+
+class TreeMeasurementCreate(BaseModel):
+    """Request body untuk mencatat pengukuran berkala pohon (growth tracking)."""
+    measurement_date: date = Field(..., description="Tanggal pengukuran")
+    height_cm: Optional[float] = Field(None, description="Tinggi pohon saat diukur (cm)")
+    dbh_cm: Optional[float] = Field(None, description="Diameter Breast Height saat diukur (cm)")
+    condition: Optional[str] = Field(None, max_length=50, description="Kondisi: healthy, stressed, dead")
+    is_alive: Optional[bool] = Field(True, description="Status hidup pohon")
+    measured_by: Optional[str] = Field(None, max_length=255, description="Nama pengukur/petugas")
+    photo_urls: Optional[List[str]] = Field(None, description="List URL foto dokumentasi")
+    notes: Optional[str] = None
+
+
+class TreeMeasurementResponse(BaseModel):
+    """Response data pengukuran pohon."""
+    id: int
+    tree_record_id: int
+    project_id: int
+    measurement_date: date
+    height_cm: Optional[float] = None
+    dbh_cm: Optional[float] = None
+    condition: Optional[str] = None
+    is_alive: bool
+    measured_by: Optional[str] = None
+    photo_urls: Optional[List[str]] = None
+    notes: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TreeGrowthPoint(BaseModel):
+    """Satu titik data pada garis waktu pertumbuhan pohon."""
+    date: date
+    height_cm: Optional[float] = None
+    dbh_cm: Optional[float] = None
+    condition: Optional[str] = None
+    is_alive: bool
+    measured_by: Optional[str] = None
+    source: str  # "initial_planting" atau "periodic_measurement"
+
+
+class TreeGrowthResponse(BaseModel):
+    """Response endpoint timeline pertumbuhan pohon."""
+    tree_record_id: int
+    project_id: int
+    species: str
+    quantity: int
+    planting_date: date
+    initial_height_cm: Optional[float] = None
+    initial_dbh_cm: Optional[float] = None
+    current_height_cm: Optional[float] = None
+    current_dbh_cm: Optional[float] = None
+    height_growth_cm: Optional[float] = None
+    dbh_growth_cm: Optional[float] = None
+    total_measurements: int = 0
+    timeline: List[TreeGrowthPoint] = []
+
+
+# ─────────────────────────────────────────────
 # FIELD REPORT
 # ─────────────────────────────────────────────
 
-
 class FieldReportCreate(BaseModel):
     """Request body untuk submit laporan lapangan."""
-
     officer_name: str = Field(..., max_length=255, description="Nama petugas lapangan")
-    plot_id: str | None = Field(
-        None, max_length=100, description="Kode plot yang dimonitor"
-    )
-    location_geojson: dict[str, Any] | None = Field(
-        None, description="Koordinat GPS petugas (GeoJSON Point)"
-    )
-    report_date: DateTimeType = Field(..., description="Tanggal & waktu laporan")
+    plot_id: Optional[str] = Field(None, max_length=100, description="Kode plot yang dimonitor")
+    location_geojson: Optional[Dict[str, Any]] = Field(None, description="Koordinat GPS petugas (GeoJSON Point)")
+    report_date: datetime = Field(..., description="Tanggal & waktu laporan")
     report_type: str = Field(
         ...,
-        description="Jenis laporan: tree_monitoring, biodiversity, incident, general, community",
+        description="Jenis laporan: tree_monitoring, biodiversity, incident, general, community"
     )
-    activity_description: str | None = Field(
-        None, description="Deskripsi kegiatan yang dilakukan"
-    )
-    result_description: str | None = Field(
-        None, description="Hasil/temuan di lapangan"
-    )
-    photo_urls: list[str] | None = Field(
-        None, description="List URL foto bukti lapangan"
-    )
+    activity_description: Optional[str] = Field(None, description="Deskripsi kegiatan yang dilakukan")
+    result_description: Optional[str] = Field(None, description="Hasil/temuan di lapangan")
+    photo_urls: Optional[List[str]] = Field(None, description="List URL foto bukti lapangan")
+    video_urls: Optional[List[str]] = Field(None, description="List URL video bukti lapangan")
+    tree_record_id: Optional[int] = Field(None, description="ID tree record terkait")
+    biodiversity_id: Optional[int] = Field(None, description="ID observasi biodiversitas terkait")
 
 
 class FieldReportResponse(BaseModel):
     id: int
     project_id: int
     officer_name: str
-    plot_id: str | None = None
-    location_geojson: dict[str, Any] | None = None
-    report_date: DateTimeType
+    plot_id: Optional[str] = None
+    location_geojson: Optional[Dict[str, Any]] = None
+    report_date: datetime
     report_type: str
-    activity_description: str | None = None
-    result_description: str | None = None
-    photo_urls: list[str] | None = None
-    created_by: int | None = None
-    created_at: DateTimeType
+    activity_description: Optional[str] = None
+    result_description: Optional[str] = None
+    photo_urls: Optional[List[str]] = None
+    video_urls: Optional[List[str]] = None
+    tree_record_id: Optional[int] = None
+    biodiversity_id: Optional[int] = None
+    created_by: Optional[int] = None
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -175,28 +254,22 @@ class FieldReportResponse(BaseModel):
 # ALERT
 # ─────────────────────────────────────────────
 
-
 class AlertCreate(BaseModel):
     """Request body untuk membuat alert secara manual."""
-
     alert_type: str = Field(
         ...,
-        description="Tipe alert: deforestation, fire, land_cover_change, monitoring_overdue, low_tree_survival",
+        description="Tipe alert: deforestation, fire, land_cover_change, monitoring_overdue, low_tree_survival"
     )
-    severity: str | None = Field(
-        "medium", description="Severity: low, medium, high, critical"
-    )
-    location_geojson: dict[str, Any] | None = Field(
-        None, description="Lokasi kejadian (GeoJSON)"
-    )
+    severity: Optional[str] = Field("medium", description="Severity: low, medium, high, critical")
+    location_geojson: Optional[Dict[str, Any]] = Field(None, description="Lokasi kejadian (GeoJSON)")
     description: str = Field(..., description="Deskripsi detail alert")
+    source_url: Optional[str] = Field(None, max_length=500, description="URL sumber/bukti remote sensing")
 
 
 class AlertUpdate(BaseModel):
     """Request body untuk update status alert."""
-
-    is_read: bool | None = None
-    is_resolved: bool | None = None
+    is_read: Optional[bool] = None
+    is_resolved: Optional[bool] = None
 
 
 class AlertResponse(BaseModel):
@@ -204,13 +277,15 @@ class AlertResponse(BaseModel):
     project_id: int
     alert_type: str
     severity: str
-    location_geojson: dict[str, Any] | None = None
+    location_geojson: Optional[Dict[str, Any]] = None
     description: str
     is_read: bool
     is_resolved: bool
-    resolved_at: DateTimeType | None = None
+    resolved_at: Optional[datetime] = None
     auto_generated: bool
-    created_at: DateTimeType
+    created_by: Optional[int] = None
+    source_url: Optional[str] = None
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -219,22 +294,16 @@ class AlertResponse(BaseModel):
 # BIODIVERSITY OBSERVATION
 # ─────────────────────────────────────────────
 
-
 class BiodiversityCreate(BaseModel):
     """Request body untuk mencatat observasi biodiversitas."""
-
     species_name: str = Field(..., max_length=255, description="Nama spesies")
     species_type: str = Field(..., description="Tipe: fauna, flora")
-    location_geojson: dict[str, Any] | None = Field(
-        None, description="Lokasi observasi (GeoJSON Point)"
-    )
-    observed_date: DateType = Field(..., description="Tanggal observasi")
-    habitat: str | None = Field(None, max_length=255, description="Jenis habitat")
-    observer: str | None = Field(None, max_length=255, description="Nama observer")
-    photo_url: str | None = Field(
-        None, max_length=500, description="URL foto spesies"
-    )
-    notes: str | None = None
+    location_geojson: Optional[Dict[str, Any]] = Field(None, description="Lokasi observasi (GeoJSON Point)")
+    observed_date: date = Field(..., description="Tanggal observasi")
+    habitat: Optional[str] = Field(None, max_length=255, description="Jenis habitat")
+    observer: Optional[str] = Field(None, max_length=255, description="Nama observer")
+    photo_url: Optional[str] = Field(None, max_length=500, description="URL foto spesies")
+    notes: Optional[str] = None
 
 
 class BiodiversityResponse(BaseModel):
@@ -242,20 +311,19 @@ class BiodiversityResponse(BaseModel):
     project_id: int
     species_name: str
     species_type: str
-    location_geojson: dict[str, Any] | None = None
-    observed_date: DateType
-    habitat: str | None = None
-    observer: str | None = None
-    photo_url: str | None = None
-    notes: str | None = None
-    created_at: DateTimeType
+    location_geojson: Optional[Dict[str, Any]] = None
+    observed_date: date
+    habitat: Optional[str] = None
+    observer: Optional[str] = None
+    photo_url: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
 class BiodiversitySummary(BaseModel):
     """Ringkasan biodiversitas proyek."""
-
     total_observations: int
     unique_species: int
     fauna_count: int
@@ -266,26 +334,16 @@ class BiodiversitySummary(BaseModel):
 # COMMUNITY DATA
 # ─────────────────────────────────────────────
 
-
 class CommunityCreate(BaseModel):
     """Request body untuk mencatat data dampak komunitas."""
-
     village_name: str = Field(..., max_length=255, description="Nama desa")
-    beneficiary_count: int | None = Field(
-        0, ge=0, description="Jumlah penerima manfaat"
-    )
-    livelihood_groups: int | None = Field(
-        0, ge=0, description="Jumlah kelompok mata pencaharian"
-    )
-    employment_count: int | None = Field(0, ge=0, description="Jumlah tenaga kerja")
-    community_investment: float | None = Field(
-        0.0, ge=0, description="Investasi ke komunitas (USD)"
-    )
-    activity_type: str | None = Field(
-        None, max_length=100, description="Jenis kegiatan komunitas"
-    )
-    description: str | None = None
-    date: DateType | None = None
+    beneficiary_count: Optional[int] = Field(0, ge=0, description="Jumlah penerima manfaat")
+    livelihood_groups: Optional[int] = Field(0, ge=0, description="Jumlah kelompok usaha/tani")
+    employment_count: Optional[int] = Field(0, ge=0, description="Jumlah tenaga kerja terserap")
+    community_investment: Optional[float] = Field(0.0, ge=0, description="Nilai investasi komunitas (USD)")
+    activity_type: Optional[str] = Field(None, max_length=100, description="Jenis kegiatan komunitas")
+    description: Optional[str] = None
+    date: Optional[date] = None
 
 
 class CommunityResponse(BaseModel):
@@ -296,63 +354,92 @@ class CommunityResponse(BaseModel):
     livelihood_groups: int
     employment_count: int
     community_investment: float
-    activity_type: str | None = None
-    description: str | None = None
-    date: DateType | None = None
-    created_at: DateTimeType
+    activity_type: Optional[str] = None
+    description: Optional[str] = None
+    date: Optional[date] = None
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
 class CommunitySummary(BaseModel):
     """Ringkasan dampak komunitas proyek."""
-
-    total_villages: int
     total_beneficiaries: int
+    total_villages: int
     total_livelihood_groups: int
     total_employment: int
-    total_community_investment: float
+    total_investment_usd: float
 
 
 # ─────────────────────────────────────────────
-# CARBON RECORD
+# CARBON RECORD (Monitoring / Estimasi)
 # ─────────────────────────────────────────────
-
 
 class CarbonCreate(BaseModel):
-    """
-    Request body untuk input data karbon.
-    CATATAN: Data ini adalah monitoring/estimation, bukan verified carbon credit.
-    """
-
-    period_start: DateType = Field(..., description="Awal periode monitoring")
-    period_end: DateType = Field(..., description="Akhir periode monitoring")
-    carbon_stock_tco2e: float | None = Field(
-        None, description="Total carbon stock (tCO2e)"
-    )
-    biomass_ton: float | None = Field(None, description="Total biomassa (ton)")
-    estimated_co2e: float | None = Field(None, description="Estimasi CO2 equivalent")
-    carbon_change: float | None = Field(
-        None, description="Perubahan karbon vs periode sebelumnya"
-    )
-    methodology: str | None = Field(
-        None, max_length=255, description="Metodologi perhitungan"
-    )
-    notes: str | None = None
+    """Request body untuk mencatat estimasi karbon per periode."""
+    period_start: date = Field(..., description="Awal periode monitoring")
+    period_end: date = Field(..., description="Akhir periode monitoring")
+    carbon_stock_tco2e: Optional[float] = Field(None, description="Total cadangan karbon (tCO2e)")
+    biomass_ton: Optional[float] = Field(None, description="Total biomassa (ton)")
+    estimated_co2e: Optional[float] = Field(None, description="Estimasi CO2 equivalent")
+    carbon_change: Optional[float] = Field(None, description="Perubahan karbon vs periode sebelumnya")
+    methodology: Optional[str] = Field(None, max_length=255, description="Metodologi estimasi")
+    notes: Optional[str] = None
 
 
 class CarbonResponse(BaseModel):
     id: int
     project_id: int
-    period_start: DateType
-    period_end: DateType
-    carbon_stock_tco2e: float | None = None
-    biomass_ton: float | None = None
-    estimated_co2e: float | None = None
-    carbon_change: float | None = None
-    methodology: str | None = None
-    notes: str | None = None
-    created_at: DateTimeType
+    period_start: date
+    period_end: date
+    carbon_stock_tco2e: Optional[float] = None
+    biomass_ton: Optional[float] = None
+    estimated_co2e: Optional[float] = None
+    carbon_change: Optional[float] = None
+    methodology: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────────
+# LANDSCAPE SNAPSHOT (Remote Sensing / Time Series)
+# ─────────────────────────────────────────────
+
+class LandscapeSnapshotCreate(BaseModel):
+    """Request body untuk mencatat snapshot lanskap / tutupan lahan."""
+    snapshot_date: date = Field(..., description="Tanggal snapshot kondisi lanskap")
+    data_source: Optional[str] = Field("manual", max_length=100, description="Sumber: manual, GEE, satellite, report")
+    forest_cover_ha: Optional[float] = Field(None, description="Tutupan hutan (ha)")
+    deforestation_ha: Optional[float] = Field(None, description="Deforestasi (ha)")
+    restoration_ha: Optional[float] = Field(None, description="Restorasi (ha)")
+    land_cleared_ha: Optional[float] = Field(None, description="Lahan terbuka / cleared (ha)")
+    fire_ha: Optional[float] = Field(None, description="Area terbakar (ha)")
+    ndvi_mean: Optional[float] = Field(None, description="Rata-rata indeks NDVI")
+    ndvi_min: Optional[float] = Field(None, description="NDVI minimum")
+    ndvi_max: Optional[float] = Field(None, description="NDVI maksimum")
+    geojson_data: Optional[Dict[str, Any]] = Field(None, description="Layer GeoJSON spasial")
+    notes: Optional[str] = None
+
+
+class LandscapeSnapshotResponse(BaseModel):
+    id: int
+    project_id: int
+    snapshot_date: date
+    data_source: Optional[str] = None
+    forest_cover_ha: Optional[float] = None
+    deforestation_ha: Optional[float] = None
+    restoration_ha: Optional[float] = None
+    land_cleared_ha: Optional[float] = None
+    fire_ha: Optional[float] = None
+    ndvi_mean: Optional[float] = None
+    ndvi_min: Optional[float] = None
+    ndvi_max: Optional[float] = None
+    geojson_data: Optional[Dict[str, Any]] = None
+    notes: Optional[str] = None
+    created_by: Optional[int] = None
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -361,26 +448,24 @@ class CarbonResponse(BaseModel):
 # DASHBOARD
 # ─────────────────────────────────────────────
 
-
 class DashboardResponse(BaseModel):
-    """Agregat lengkap semua data monitor untuk satu proyek."""
-
+    """Response agregat dashboard proyek."""
     project_id: int
     project_name: str
     project_status: str
 
     # Statistik area
-    area_ha: float | None = None
+    area_ha: Optional[float] = None
 
     # Statistik pohon
     trees_planted: int = 0
     trees_survived: int = 0
     trees_dead: int = 0
-    survival_rate: float | None = None
+    survival_rate: Optional[float] = None
 
     # Karbon (data terbaru)
-    carbon_stock_tco2e: float | None = None
-    estimated_co2e: float | None = None
+    carbon_stock_tco2e: Optional[float] = None
+    estimated_co2e: Optional[float] = None
 
     # Biodiversitas
     species_recorded: int = 0
@@ -392,12 +477,361 @@ class DashboardResponse(BaseModel):
 
     # Progress kegiatan
     total_activities: int = 0
-    recent_activities: list[dict[str, Any]] = []
+    recent_activities: List[Dict[str, Any]] = []
 
     # Alert aktif
     active_alerts: int = 0
-    recent_alerts: list[dict[str, Any]] = []
+    recent_alerts: List[Dict[str, Any]] = []
 
     # Field reports
     total_field_reports: int = 0
-    last_field_report: DateTimeType | None = None
+    last_field_report: Optional[datetime] = None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROJECT MEMBER
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ProjectMemberCreate(BaseModel):
+    """Request body untuk assign user ke proyek."""
+    user_id: int = Field(..., description="ID user yang akan di-assign")
+    role: str = Field(
+        "viewer",
+        description="Role dalam proyek: project_manager, field_officer, viewer"
+    )
+
+
+class ProjectMemberResponse(BaseModel):
+    """Response data anggota proyek."""
+    id: int
+    project_id: int
+    user_id: int
+    role: str
+    assigned_at: Optional[datetime] = None
+    assigned_by: Optional[int] = None
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROJECT PROGRESS (Target vs Actual)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TargetProgress(BaseModel):
+    """Progress untuk satu target key."""
+    target: float
+    actual: float
+    progress_pct: float
+    unit: str
+
+
+class TreeSummaryProgress(BaseModel):
+    """Ringkasan statistik pohon."""
+    planted: int = 0
+    survived: int = 0
+    dead: int = 0
+    survival_rate: float = 0.0
+    total_batches: int = 0
+
+
+class ActivityTypeSummary(BaseModel):
+    """Ringkasan kegiatan per tipe."""
+    count: int = 0
+    total_realization: float = 0.0
+    unit: Optional[str] = None
+
+
+class ProgressResponse(BaseModel):
+    """Response endpoint GET /projects/{id}/progress."""
+    project_id: int
+    project_name: str
+    targets: Dict[str, TargetProgress] = {}
+    tree_summary: TreeSummaryProgress
+    activities_by_type: Dict[str, ActivityTypeSummary] = {}
+    overall_progress_pct: float = 0.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EVIDENCE SYSTEM (Multimedia Timeline & Map)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class EvidenceItem(BaseModel):
+    """Satu item bukti / evidence pada timeline multimedia."""
+    id: str
+    source_type: str  # "field_report", "activity", "tree_record", "tree_measurement", "biodiversity"
+    source_id: int
+    timestamp: datetime
+    title: str
+    description: Optional[str] = None
+    author: Optional[str] = None
+    plot_id: Optional[str] = None
+    photos: List[str] = []
+    videos: List[str] = []
+    location_geojson: Optional[Dict[str, Any]] = None
+    metadata: Dict[str, Any] = {}
+
+
+class EvidenceTimelineResponse(BaseModel):
+    """Response feed timeline multimedia evidence."""
+    project_id: int
+    total_items: int
+    page: int
+    limit: int
+    items: List[EvidenceItem]
+
+
+class GeoJSONFeature(BaseModel):
+    """GeoJSON Feature standar untuk visualisasi spasial."""
+    type: str = "Feature"
+    geometry: Optional[Dict[str, Any]] = None
+    properties: Dict[str, Any]
+
+
+class EvidenceMapResponse(BaseModel):
+    """GeoJSON FeatureCollection untuk visualisasi evidence di peta."""
+    type: str = "FeatureCollection"
+    project_id: int
+    total_features: int
+    features: List[GeoJSONFeature]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SPATIAL GIS MULTI-LAYER & SATELLITE MAP
+# ─────────────────────────────────────────────────────────────────────────────
+
+class GeoJSONFeatureCollection(BaseModel):
+    """Standar FeatureCollection GeoJSON."""
+    type: str = "FeatureCollection"
+    total_features: int = 0
+    features: List[GeoJSONFeature] = []
+
+
+class MapLayerSummary(BaseModel):
+    """Ringkasan layer spasial proyek."""
+    total_plots: int = 0
+    total_activities: int = 0
+    total_tree_batches: int = 0
+    total_alerts: int = 0
+    total_field_reports: int = 0
+    total_biodiversity: int = 0
+    has_boundary: bool = False
+    center_coordinates: Optional[List[float]] = None  # [lng, lat]
+
+
+class ProjectMapLayersResponse(BaseModel):
+    """Response multi-layer spasial lengkap untuk peta GIS interaktif."""
+    project_id: int
+    project_name: str
+    boundary: Optional[GeoJSONFeature] = None
+    plots: GeoJSONFeatureCollection
+    activities: GeoJSONFeatureCollection
+    tree_locations: GeoJSONFeatureCollection
+    alerts: GeoJSONFeatureCollection
+    field_reports: GeoJSONFeatureCollection
+    biodiversity: GeoJSONFeatureCollection
+    summary: MapLayerSummary
+
+
+class SatelliteTileResponse(BaseModel):
+    """Response metadata tile satelit / remote sensing."""
+    project_id: int
+    tile_url_template: str
+    attribution: str
+    layer_type: str  # "true_color", "ndvi", "swir"
+    acquisition_date: Optional[str] = None
+    cloud_coverage_pct: Optional[float] = None
+    available_layers: List[str] = []
+    latest_ndvi_metrics: Optional[Dict[str, Any]] = None
+
+
+class GEESyncResponse(BaseModel):
+    """Response sinkronisasi data remote sensing GEE ke LandscapeSnapshot."""
+    status: str
+    message: str
+    snapshot_id: int
+    snapshot_date: date
+    data_source: str
+    metrics: Dict[str, Any]
+    alerts_generated: List[str] = []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INDICATORS & COMPARISON ENGINE
+# ─────────────────────────────────────────────────────────────────────────────
+
+class VegetationHealthIndicator(BaseModel):
+    ndvi_mean: Optional[float] = None
+    status: str  # "Sangat Baik", "Baik", "Sedang", "Kritis"
+    description: str
+
+
+class TreePerformanceIndicator(BaseModel):
+    trees_planted: int = 0
+    trees_survived: int = 0
+    survival_rate_pct: float = 0.0
+    status: str  # "Optimal", "Waspada", "Kritis"
+    avg_height_growth_cm: Optional[float] = None
+    avg_dbh_growth_cm: Optional[float] = None
+
+
+class CarbonIndicator(BaseModel):
+    carbon_stock_tco2e: Optional[float] = None
+    estimated_co2e: Optional[float] = None
+    carbon_density_tco2e_per_ha: Optional[float] = None
+    methodology: Optional[str] = None
+
+
+class BiodiversityIndicator(BaseModel):
+    unique_species_count: int = 0
+    fauna_count: int = 0
+    flora_count: int = 0
+    richness_index: str  # "Tinggi", "Sedang", "Rendah"
+
+
+class CommunityIndicator(BaseModel):
+    total_beneficiaries: int = 0
+    total_villages: int = 0
+    total_investment_usd: float = 0.0
+
+
+class ProjectIndicatorsResponse(BaseModel):
+    """Response komprehensif metrik indikator ekologis & sosial proyek."""
+    project_id: int
+    project_name: str
+    project_type: Optional[str] = None
+    evaluated_at: datetime
+    overall_health_score: float  # Skala 0.0 - 100.0
+    health_category: str  # "Sangat Sehat", "Sehat", "Perlu Perhatian", "Kritis"
+    vegetation_health: VegetationHealthIndicator
+    tree_performance: TreePerformanceIndicator
+    carbon: CarbonIndicator
+    biodiversity: BiodiversityIndicator
+    community: CommunityIndicator
+
+
+class BaselineComparisonMetric(BaseModel):
+    """Satu metrik perbandingan antara baseline awal vs kondisi terkini."""
+    metric_name: str
+    unit: str
+    baseline_value: Optional[float] = None
+    current_value: Optional[float] = None
+    change_value: Optional[float] = None
+    change_pct: Optional[float] = None
+    status: str  # "improved", "stable", "declined"
+
+
+class ProjectBaselineComparisonResponse(BaseModel):
+    """Response perbandingan kondisi proyek: Baseline vs Kondisi Terkini."""
+    project_id: int
+    project_name: str
+    baseline_date: Optional[date] = None
+    current_date: date
+    metrics: List[BaselineComparisonMetric]
+    summary_narrative: str
+
+
+class ProjectComparisonCard(BaseModel):
+    """Kartu data ringkas satu proyek untuk komparasi multi-project."""
+    project_id: int
+    name: str
+    location_name: str
+    project_type: Optional[str] = None
+    area_ha: Optional[float] = None
+    status: str
+    overall_progress_pct: float
+    trees_planted: int
+    survival_rate_pct: float
+    carbon_stock_tco2e: Optional[float] = None
+    species_recorded: int
+    active_alerts_count: int
+
+
+class MultiProjectComparisonResponse(BaseModel):
+    """Response komparasi performa lintas banyak proyek."""
+    total_projects: int
+    projects: List[ProjectComparisonCard]
+    benchmarks: Dict[str, Any]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ALERT SYSTEM EXPANSION (Phase 7)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class AlertCheckResponse(BaseModel):
+    """Response evaluasi aturan alert otomatis."""
+    project_id: int
+    evaluated_rules: int
+    new_alerts_created: List[str] = []
+    total_active_alerts: int
+    message: str
+
+
+class AlertSummaryResponse(BaseModel):
+    """Ringkasan statistik alert proyek."""
+    project_id: int
+    total_alerts: int
+    active_alerts: int
+    resolved_alerts: int
+    resolution_rate_pct: float
+    by_severity: Dict[str, int]
+    by_type: Dict[str, int]
+    latest_alerts: List[AlertResponse] = []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MRV SUMMARY & REPORTING (Phase 8)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class MRVMeasurementBlock(BaseModel):
+    trees_planted: int = 0
+    trees_survived: int = 0
+    survival_rate_pct: float = 0.0
+    avg_height_growth_cm: Optional[float] = None
+    avg_dbh_growth_cm: Optional[float] = None
+    forest_cover_ha: Optional[float] = None
+    deforestation_ha: Optional[float] = None
+    ndvi_mean: Optional[float] = None
+    carbon_stock_tco2e: Optional[float] = None
+    estimated_co2e: Optional[float] = None
+    unique_species_count: int = 0
+
+
+class MRVReportingBlock(BaseModel):
+    overall_progress_pct: float = 0.0
+    targets: Dict[str, Any] = {}
+    total_activities: int = 0
+    activities_by_type: Dict[str, Any] = {}
+    total_field_reports: int = 0
+    latest_field_report_date: Optional[datetime] = None
+
+
+class MRVVerificationBlock(BaseModel):
+    total_photos_count: int = 0
+    total_videos_count: int = 0
+    gps_verified_points_count: int = 0
+    satellite_snapshots_count: int = 0
+    total_alerts: int = 0
+    active_alerts: int = 0
+    resolved_alerts: int = 0
+    resolution_rate_pct: float = 0.0
+
+
+class MRVSummaryResponse(BaseModel):
+    """Ringkasan eksekutif MRV (Measurement, Reporting, Verification) formal proyek."""
+    project_id: int
+    project_name: str
+    location_name: str
+    project_type: Optional[str] = None
+    area_ha: Optional[float] = None
+    start_date: Optional[date] = None
+    status: str
+    generated_at: datetime
+    measurement: MRVMeasurementBlock
+    reporting: MRVReportingBlock
+    verification: MRVVerificationBlock
+    executive_summary: str
+
+
+
+
+

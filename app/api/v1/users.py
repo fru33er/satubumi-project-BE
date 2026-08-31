@@ -11,7 +11,9 @@ from app.core.activity import create_activity_log
 from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
-ALLOWED_ROLES = {"admin", "super_admin", "client"}
+# Role yang diizinkan di sistem
+ALLOWED_ROLES = {"admin", "super_admin", "client", "field_officer"}
+
 
 router = APIRouter(prefix="/users", tags=["User Management (Super Admin Only)"])
 

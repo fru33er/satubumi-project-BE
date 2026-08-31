@@ -1,6 +1,5 @@
 from datetime import datetime
-
-from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, Date, ForeignKey, Text, JSON
 
 from app.core.database import Base
 
@@ -17,6 +16,18 @@ class Project(Base):
     # Status proyek: active, completed, suspended
     status = Column(String(50), default="active", nullable=False)
 
+    # Tipe proyek: reforestation, mangrove, agroforestry, peatland, blue_carbon, etc.
+    project_type = Column(String(100), nullable=True)
+
+    # Durasi proyek
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+
+    # Lokasi administratif
+    country = Column(String(100), nullable=True, default="Indonesia")
+    province = Column(String(100), nullable=True)
+    district = Column(String(100), nullable=True)
+
     # Batas wilayah proyek dalam format GeoJSON (Polygon)
     boundary_geojson = Column(JSON, nullable=True)
 
@@ -27,3 +38,4 @@ class Project(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+

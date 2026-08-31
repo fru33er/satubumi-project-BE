@@ -1,396 +1,691 @@
-# API Handoff — SATUBUMI MONITOR (Frontend Guide)
+# 🌿 SATUBUMI MONITOR — FRONTEND INTEGRATION & API HANDOFF GUIDE
 
-**Base URL:** `http://localhost:8000/api/v1`  
-**Swagger Docs:** `http://localhost:8000/docs`  
-**Auth:** Semua endpoint SATUBUMI MONITOR memerlukan header `Authorization: Bearer <access_token>`
-
-> Modul ini ditambahkan di atas backend Rapid-FS yang sudah ada. Endpoint lama tidak berubah.
+Dokumentasi lengkap integrasi API backend untuk developer Frontend (Web & Mobile).
 
 ---
 
-## 🗺️ Gambaran Besar
+## 📌 1. Informasi Umum & Autentikasi
 
-SATUBUMI MONITOR memiliki **2 lapisan endpoint**:
-
-```
-/api/v1/projects               → CRUD Proyek (master data)
-/api/v1/projects/{id}/...      → Data Monitor per-Proyek
-```
-
-Semua data monitor (pohon, kegiatan, laporan, dll) **terikat ke satu `project_id`**.
-
----
-
-## 📋 1. PROJECTS — Master Data Proyek
-
-### `GET /projects`
-Daftar semua proyek. *(Butuh login)*
-
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "name": "Proyek Restorasi Kalimantan Barat",
-    "location_name": "Kalimantan Barat",
-    "area_ha": 25430.0,
-    "status": "active",
-    "boundary_geojson": { "type": "Polygon", "coordinates": [...] },
-    "targets_json": { "restoration_ha": 1000, "tree_planting": 100000 },
-    "created_at": "2026-08-24T00:00:00",
-    "updated_at": "2026-08-24T00:00:00"
-  }
-]
-```
-
-### `POST /projects` — Admin Only
-```json
-{
-  "name": "Proyek Restorasi Kalimantan Barat",
-  "location_name": "Kalimantan Barat",
-  "area_ha": 25430.0,
-  "status": "active",
-  "boundary_geojson": {
-    "type": "Polygon",
-    "coordinates": [[[108.0, -1.0], [109.0, -1.0], [109.0, -2.0], [108.0, -2.0], [108.0, -1.0]]]
-  },
-  "targets_json": { "restoration_ha": 1000, "tree_planting": 100000 }
-}
-```
-> `boundary_geojson` boleh `null`, bisa diisi nanti lewat `PUT`.
-
-### `PUT /projects/{id}` — Admin Only
-Semua field opsional, hanya yang dikirim yang berubah.
-
-### `DELETE /projects/{id}` — Admin Only
-Hapus proyek + **semua data monitor-nya ikut terhapus** (cascade).
+- **Base URL API**: `http://localhost:8000/api/v1` (atau staging/production domain)
+- **Format Payload**: `application/json`
+- **Header Autentikasi**:
+  ```http
+  Authorization: Bearer <JWT_ACCESS_TOKEN>
+  ```
+- **Matriks Hak Akses (Role)**:
+  - `super_admin` / `admin`: Full akses (CRUD Proyek, GEE Sync, Manual Alert, Tambah Member).
+  - `field_officer`: Input laporan lapangan, tambah plot, catat pengukuran pohon, trigger cek alert.
+  - `viewer` / `user`: Read-only (Dashboard, Peta Spasial, Laporan MRV, Indikator).
 
 ---
 
-## 📊 2. DASHBOARD
+## 🗺️ 2. Konsep Alur Sistem
 
-### `GET /projects/{id}/dashboard`
-**Endpoint utama untuk halaman monitor.** Menggabungkan semua data.  
-*(Juga auto-trigger cek `monitoring_overdue` setiap dipanggil)*
-
-**Response:**
-```json
-{
-  "project_id": 1,
-  "project_name": "Proyek Restorasi Kalimantan Barat",
-  "project_status": "active",
-  "area_ha": 25430.0,
-  "trees_planted": 125430,
-  "trees_survived": 114643,
-  "trees_dead": 10787,
-  "survival_rate": 91.4,
-  "carbon_stock_tco2e": 3200000.0,
-  "estimated_co2e": 2900000.0,
-  "species_recorded": 187,
-  "total_beneficiaries": 2430,
-  "total_villages": 12,
-  "total_livelihood_groups": 27,
-  "total_activities": 5,
-  "recent_activities": [
-    { "id": 1, "type": "planting", "date": "2026-08-22", "realization": 5000, "unit": "trees" }
-  ],
-  "active_alerts": 2,
-  "recent_alerts": [
-    { "id": 1, "type": "monitoring_overdue", "severity": "medium", "description": "...", "created_at": "..." }
-  ],
-  "total_field_reports": 34,
-  "last_field_report": "2026-08-20T09:00:00"
-}
+```
+PROJECT ➔ MAP ➔ MONITOR ➔ MEASURE ➔ COMPARE ➔ ALERT ➔ REPORT (MRV)
 ```
 
 ---
 
-## 🌱 3. PROJECT ACTIVITIES — Kegiatan Proyek
+## 📦 3. Daftar Endpoint Lengkap per Modul
 
-**Jenis kegiatan yang valid:**
-`planting` | `restoration` | `biodiversity_survey` | `community_development` | `fire_prevention` | `forest_protection`
+### 🏢 MODUL 1: Project & Target vs Actual Progress
 
-### `GET /projects/{id}/activities`
-### `GET /projects/{id}/activities/{aid}`
-### `POST /projects/{id}/activities` — Admin Only
-```json
-{
-  "activity_type": "planting",
-  "activity_date": "2026-08-22",
-  "location_geojson": { "type": "Point", "coordinates": [108.5, -1.5] },
-  "target": 10000,
-  "realization": 8500,
-  "unit": "trees",
-  "executor": "Tim Lapangan A",
-  "photo_urls": ["http://localhost:8000/static/uploads/foto1.jpg"],
-  "notes": "Penanaman di zona 3"
-}
-```
-
----
-
-## 🌳 4. TREE RECORDS — Monitoring Pohon
-
-### `GET /projects/{id}/trees`
-### `GET /projects/{id}/trees/summary`
-```json
-{
-  "trees_planted": 125430,
-  "trees_survived": 114643,
-  "trees_dead": 10787,
-  "survival_rate": 91.4,
-  "alert_triggered": false
-}
-```
-> `alert_triggered: true` = survival rate < 70%, ada alert aktif.
-
-### `POST /projects/{id}/trees` — Admin Only
-**Setelah POST, sistem otomatis cek survival rate dan buat alert jika < 70%.**
-```json
-{
-  "plot_id": "WK-023",
-  "species": "Shorea balangeran",
-  "quantity": 500,
-  "planting_date": "2026-08-01",
-  "location_geojson": { "type": "Point", "coordinates": [108.5, -1.5] },
-  "condition": "healthy",
-  "height_cm": 45.5,
-  "dbh_cm": 3.2,
-  "is_alive": true,
-  "photo_urls": ["http://..."],
-  "notes": "Batch pertama plot WK-023"
-}
-```
-**`condition` yang valid:** `healthy` | `stressed` | `dead`
-
-### `PUT /projects/{id}/trees/{tid}` — Admin Only
-Update kondisi pohon (monitoring berkala). Semua field opsional.
-**Setelah PUT, juga auto-cek survival rate.**
-
----
-
-## 📱 5. FIELD REPORTS — Laporan Lapangan
-
-### `GET /projects/{id}/field-reports`
-### `GET /projects/{id}/field-reports/{fid}`
-### `POST /projects/{id}/field-reports` — Semua user login bisa
-```json
-{
-  "officer_name": "Andi Prasetyo",
-  "plot_id": "WK-023",
-  "location_geojson": { "type": "Point", "coordinates": [108.512, -1.534] },
-  "report_date": "2026-08-22T09:30:00",
-  "report_type": "tree_monitoring",
-  "activity_description": "Monitoring kondisi pohon di plot WK-023",
-  "result_description": "85 pohon dimonitoring, 3 dalam kondisi stressed",
-  "photo_urls": ["http://..."]
-}
-```
-**`report_type` yang valid:**
-`tree_monitoring` | `biodiversity` | `incident` | `general` | `community`
-
----
-
-## 🚨 6. ALERTS — Peringatan
-
-### `GET /projects/{id}/alerts`
-Default: hanya alert yang belum resolved.  
-`?only_active=false` → tampilkan semua termasuk yang sudah resolved.  
-*(Juga auto-trigger cek `monitoring_overdue` setiap dipanggil)*
-
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "alert_type": "low_tree_survival",
-    "severity": "high",
-    "description": "Survival rate pohon turun ke 65.0%...",
-    "is_read": false,
-    "is_resolved": false,
-    "auto_generated": true,
-    "created_at": "2026-08-24T07:00:00"
-  }
-]
-```
-
-### `POST /projects/{id}/alerts` — Admin Only
-```json
-{
-  "alert_type": "deforestation",
-  "severity": "high",
-  "location_geojson": { "type": "Point", "coordinates": [108.5, -1.5] },
-  "description": "Terdeteksi pengurangan tutupan hutan di zona utara"
-}
-```
-**`alert_type` yang valid:**
-`deforestation` | `fire` | `land_cover_change` | `monitoring_overdue` | `low_tree_survival`
-
-### `PUT /projects/{id}/alerts/{aid}` — Semua user login bisa
-```json
-{ "is_read": true }
-```
-atau:
-```json
-{ "is_resolved": true }
-```
-> Saat `is_resolved: true`, field `resolved_at` otomatis terisi timestamp sekarang.
-
----
-
-## 🦋 7. BIODIVERSITY — Keanekaragaman Hayati
-
-### `GET /projects/{id}/biodiversity`
-### `GET /projects/{id}/biodiversity/summary`
-```json
-{
-  "total_observations": 215,
-  "unique_species": 187,
-  "fauna_count": 143,
-  "flora_count": 72
-}
-```
-### `POST /projects/{id}/biodiversity` — Admin Only
-```json
-{
-  "species_name": "Pongo pygmaeus",
-  "species_type": "fauna",
-  "location_geojson": { "type": "Point", "coordinates": [108.6, -1.4] },
-  "observed_date": "2026-08-18",
-  "habitat": "Hutan sekunder",
-  "observer": "Dr. Sari",
-  "photo_url": "http://...",
-  "notes": "1 individu dewasa di plot WK-031"
-}
-```
-**`species_type`:** `fauna` | `flora`
-
----
-
-## 👥 8. COMMUNITY — Dampak Sosial
-
-### `GET /projects/{id}/community`
-### `GET /projects/{id}/community/summary`
-```json
-{
-  "total_villages": 12,
-  "total_beneficiaries": 2430,
-  "total_livelihood_groups": 27,
-  "total_employment": 340,
-  "total_community_investment": 125000.0
-}
-```
-### `POST /projects/{id}/community` — Admin Only
-```json
-{
-  "village_name": "Desa Mekar Jaya",
-  "beneficiary_count": 250,
-  "livelihood_groups": 3,
-  "employment_count": 45,
-  "community_investment": 12000.0,
-  "activity_type": "pelatihan",
-  "description": "Pelatihan agroforestri untuk petani lokal",
-  "date": "2026-08-15"
-}
-```
-
----
-
-## 🌿 9. CARBON — Estimasi Karbon
-
-> ⚠️ **Wajib**: Tampilkan data karbon dengan label **"Estimasi Monitoring"**, bukan sebagai verified carbon credit.
-
-### `GET /projects/{id}/carbon`
-### `POST /projects/{id}/carbon` — Admin Only
-```json
-{
-  "period_start": "2026-01-01",
-  "period_end": "2026-06-30",
-  "carbon_stock_tco2e": 3200000.0,
-  "biomass_ton": 5800000.0,
-  "estimated_co2e": 2900000.0,
-  "carbon_change": 150000.0,
-  "methodology": "IPCC Tier 2",
-  "notes": "Periode semester 1 2026"
-}
-```
-
----
-
-## 🤖 Logika Auto-Alert
-
-| Kapan terjadi | Kondisi | Alert Type | Severity |
-|---------------|---------|------------|----------|
-| POST/PUT `/trees` | Survival rate < 70% | `low_tree_survival` | `high` |
-| POST/PUT `/trees` | Survival rate < 50% | `low_tree_survival` | `critical` |
-| GET `/alerts` atau `/dashboard` | Tidak ada field report > 30 hari | `monitoring_overdue` | `medium` |
-
-> Alert auto tidak duplikat — sistem tidak buat alert baru kalau tipe yang sama sudah aktif.
-
----
-
-## 🔐 Ringkasan Hak Akses
-
-| Endpoint | `admin`/`super_admin` | `client` |
-|----------|-----------------------|---------|
-| Buat/edit/hapus proyek | ✅ | ❌ |
-| Buat activities, trees, biodiversity, community, carbon, alert | ✅ | ❌ |
-| Lihat semua data | ✅ | ✅ |
-| Submit field report | ✅ | ✅ |
-| Mark alert read/resolved | ✅ | ✅ |
-
----
-
-## 💻 Contoh Kode JavaScript
-
-### Fetch Dashboard
-```javascript
-async function getProjectDashboard(projectId, token) {
-  const res = await fetch(`http://localhost:8000/api/v1/projects/${projectId}/dashboard`, {
-    headers: { 'Authorization': `Bearer ${token}` }
-  });
-  return await res.json();
-}
-```
-
-### Submit Field Report
-```javascript
-async function submitFieldReport(projectId, data, token) {
-  const res = await fetch(`http://localhost:8000/api/v1/projects/${projectId}/field-reports`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      officer_name: data.officerName,
-      plot_id: data.plotId,
-      location_geojson: { type: "Point", coordinates: [data.lng, data.lat] },
-      report_date: new Date().toISOString(),
-      report_type: data.reportType,
-      activity_description: data.activityDesc,
-      result_description: data.resultDesc,
-      photo_urls: data.photoUrls ?? []
-    })
-  });
-  return await res.json();
-}
-```
-
-### Mark Alert Resolved
-```javascript
-async function resolveAlert(projectId, alertId, token) {
-  const res = await fetch(
-    `http://localhost:8000/api/v1/projects/${projectId}/alerts/${alertId}`,
+#### A. Ambil Daftar Proyek (Pagination & Filter)
+- **Method / URL**: `GET /api/v1/projects`
+- **Query Params**:
+  - `page`: int (default `1`)
+  - `limit`: int (default `20`, max `100`)
+  - `status`: string (`active`, `completed`, `suspended`)
+  - `project_type`: string (`reforestation`, `mangrove`, `peatland`, `agroforestry`, `blue_carbon`)
+  - `search`: string (cari nama/lokasi)
+- **Response `200 OK`**:
+  ```json
+  [
     {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ is_resolved: true })
+      "id": 1,
+      "name": "Restorasi Gambut Sebangau",
+      "description": "Proyek restorasi hidrologis gambut dan penanaman pohon endemik",
+      "location_name": "Palangkaraya, Kalimantan Tengah",
+      "project_type": "peatland",
+      "area_ha": 1500.0,
+      "status": "active",
+      "start_date": "2023-01-01",
+      "end_date": "2030-12-31",
+      "country": "Indonesia",
+      "province": "Kalimantan Tengah",
+      "district": "Palangkaraya",
+      "boundary_geojson": { "type": "Polygon", "coordinates": [...] },
+      "targets_json": { "tree_planting": 100000, "restoration_ha": 1000 },
+      "created_at": "2026-01-10T08:00:00Z"
     }
-  );
-  return await res.json();
+  ]
+  ```
+
+#### B. Ambil Kalkulasi Progress Target vs Actual
+- **Method / URL**: `GET /api/v1/projects/{project_id}/progress`
+- **Response `200 OK`**:
+  ```json
+  {
+    "project_id": 1,
+    "project_name": "Restorasi Gambut Sebangau",
+    "status": "active",
+    "overall_progress_pct": 65.5,
+    "tree_summary": {
+      "planted": 50000,
+      "survived": 48500,
+      "survival_rate": 97.0
+    },
+    "activity_summary": [
+      {
+        "activity_type": "tree_planting",
+        "total_target": 100000,
+        "total_realization": 50000,
+        "unit": "trees",
+        "progress_pct": 50.0
+      },
+      {
+        "activity_type": "canal_blocking",
+        "total_target": 50,
+        "total_realization": 45,
+        "unit": "units",
+        "progress_pct": 90.0
+      }
+    ],
+    "target_progress": [
+      {
+        "target_key": "tree_planting",
+        "target_value": 100000,
+        "actual_value": 50000,
+        "progress_pct": 50.0,
+        "unit": "trees"
+      }
+    ]
+  }
+  ```
+
+---
+
+### 🗺️ MODUL 2: Spatial GIS Multi-Layer Map & Satelit
+
+#### A. Ambil 7 Layer Spasial Lengkap (Siap Render di Leaflet/Mapbox)
+- **Method / URL**: `GET /api/v1/projects/{project_id}/map/layers`
+- **Response `200 OK`**:
+  ```json
+  {
+    "project_id": 1,
+    "project_name": "Restorasi Gambut Sebangau",
+    "boundary": {
+      "type": "Feature",
+      "geometry": { "type": "Polygon", "coordinates": [...] },
+      "properties": { "name": "Restorasi Gambut Sebangau", "area_ha": 1500.0 }
+    },
+    "plots": { "type": "FeatureCollection", "total_features": 4, "features": [...] },
+    "activities": { "type": "FeatureCollection", "total_features": 8, "features": [...] },
+    "tree_locations": { "type": "FeatureCollection", "total_features": 12, "features": [...] },
+    "alerts": { "type": "FeatureCollection", "total_features": 1, "features": [...] },
+    "field_reports": { "type": "FeatureCollection", "total_features": 15, "features": [...] },
+    "biodiversity": { "type": "FeatureCollection", "total_features": 6, "features": [...] },
+    "summary": {
+      "has_boundary": true,
+      "total_plots": 4,
+      "total_activities": 8,
+      "total_tree_batches": 12,
+      "total_alerts": 1,
+      "total_field_reports": 15,
+      "total_biodiversity": 6,
+      "center_coordinates": [113.854, -2.235]
+    }
+  }
+  ```
+
+#### B. Konfigurasi Tile Satelit & Indeks NDVI
+- **Method / URL**: `GET /api/v1/projects/{project_id}/map/satellite`
+- **Query Params**: `layer_type` (`true_color`, `ndvi`, `swir`)
+- **Response `200 OK`**:
+  ```json
+  {
+    "project_id": 1,
+    "tile_url_template": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    "attribution": "Copernicus Sentinel-2 / Google Earth Engine",
+    "layer_type": "true_color",
+    "acquisition_date": "2026-02-15",
+    "cloud_coverage_pct": 1.8,
+    "available_layers": ["true_color", "ndvi", "swir", "tree_cover_loss"],
+    "latest_ndvi_metrics": {
+      "mean": 0.78,
+      "min": 0.45,
+      "max": 0.91,
+      "date": "2026-02-15"
+    }
+  }
+  ```
+
+#### C. Sinkronisasi Telemetri Google Earth Engine (GEE Sync)
+- **Method / URL**: `POST /api/v1/projects/{project_id}/gee/sync`
+- **Auth**: `admin` only
+- **Response `200 OK`**:
+  ```json
+  {
+    "status": "success",
+    "message": "Sinkronisasi data satelit GEE berhasil.",
+    "snapshot_id": 12,
+    "snapshot_date": "2026-02-28",
+    "data_source": "Sentinel-2 & Hansen GFC",
+    "metrics": {
+      "forest_cover_ha": 1150.0,
+      "deforestation_ha": 0.0,
+      "ndvi_mean": 0.78
+    },
+    "alerts_generated": []
+  }
+  ```
+
+---
+
+### 🌳 MODUL 3: Monitoring Plots & Tree Growth Tracking
+
+#### A. CRUD Monitoring Plot
+- **Buat Plot**: `POST /api/v1/projects/{project_id}/plots`
+  ```json
+  {
+    "plot_code": "PL-SBG-01",
+    "plot_name": "Plot Permanen Belangeran 01",
+    "plot_type": "permanent_plot",
+    "area_ha": 2.0,
+    "location_geojson": { "type": "Point", "coordinates": [113.854, -2.235] },
+    "notes": "Plot sampling kerapatan kanopi"
+  }
+  ```
+- **Daftar Plot**: `GET /api/v1/projects/{project_id}/plots`
+
+#### B. Catat Pengukuran Berkala Pohon
+- **Method / URL**: `POST /api/v1/projects/{project_id}/trees/{tree_id}/measurements`
+- **Request Body**:
+  ```json
+  {
+    "measurement_date": "2025-06-10",
+    "height_cm": 140.0,
+    "dbh_cm": 8.5,
+    "condition": "healthy",
+    "is_alive": true,
+    "photo_url": "https://storage.satubumi.org/evidence/tree_01.jpg",
+    "measured_by": "Rina Petugas Lapangan",
+    "notes": "Pertumbuhan daun lebat"
+  }
+  ```
+
+#### C. Analisis Kurva & Delta Pertumbuhan Pohon
+- **Method / URL**: `GET /api/v1/projects/{project_id}/trees/{tree_id}/growth`
+- **Response `200 OK`**:
+  ```json
+  {
+    "tree_id": 10,
+    "species": "Shorea balangeran",
+    "initial_planting_date": "2023-01-10",
+    "initial_height_cm": 50.0,
+    "initial_dbh_cm": 3.0,
+    "current_height_cm": 140.0,
+    "current_dbh_cm": 8.5,
+    "height_growth_delta_cm": 90.0,
+    "dbh_growth_delta_cm": 5.5,
+    "current_condition": "healthy",
+    "is_alive": true,
+    "total_measurements": 3,
+    "timeline": [
+      { "date": "2023-01-10", "height_cm": 50.0, "dbh_cm": 3.0, "condition": "healthy", "is_alive": true },
+      { "date": "2024-01-10", "height_cm": 95.0, "dbh_cm": 5.8, "condition": "healthy", "is_alive": true },
+      { "date": "2025-06-10", "height_cm": 140.0, "dbh_cm": 8.5, "condition": "healthy", "is_alive": true }
+    ]
+  }
+  ```
+
+---
+
+### 📷 MODUL 4: Field Monitoring & Evidence Feed
+
+#### A. Feed Multimedia Timeline Bukti Lapangan
+- **Method / URL**: `GET /api/v1/projects/{project_id}/evidence/timeline`
+- **Query Params**:
+  - `page`: int (default `1`)
+  - `limit`: int (default `20`)
+  - `source_type`: string (`field_report`, `activity`, `tree_record`, `biodiversity`)
+  - `media_type`: string (`all`, `photo`, `video`)
+  - `start_date` / `end_date`: `YYYY-MM-DD`
+- **Response `200 OK`**:
+  ```json
+  {
+    "project_id": 1,
+    "total_items": 35,
+    "page": 1,
+    "limit": 20,
+    "items": [
+      {
+        "id": "field_report_5",
+        "source_type": "field_report",
+        "source_id": 5,
+        "title": "Laporan Patroli: Keanekaragaman Hayati",
+        "description": "Ditemukan jejak bekantan dan orangutan di zona restorasi",
+        "event_date": "2026-01-20",
+        "author": "Budi Lapangan",
+        "location_geojson": { "type": "Point", "coordinates": [113.854, -2.235] },
+        "photo_urls": ["https://storage.satubumi.org/evidence/photo1.jpg"],
+        "video_urls": ["https://storage.satubumi.org/evidence/camtrap1.mp4"],
+        "media_type": "video",
+        "metadata": { "report_type": "biodiversity", "plot_id": 2 }
+      }
+    ]
+  }
+  ```
+
+#### B. GeoJSON Map Bukti Lapangan
+- **Method / URL**: `GET /api/v1/projects/{project_id}/evidence/map`
+- **Response `200 OK`**: Mengembalikan standar GeoJSON `FeatureCollection` dengan properties metadata untuk popup card di peta.
+
+---
+
+### 📈 MODUL 5: Performance Indicators & Baseline Comparison
+
+#### A. Ringkasan Indikator Kesehatan Ekologis & Sosial
+- **Method / URL**: `GET /api/v1/projects/{project_id}/indicators`
+- **Response `200 OK`**:
+  ```json
+  {
+    "project_id": 1,
+    "project_name": "Restorasi Gambut Sebangau",
+    "overall_health_score": 88.5,
+    "health_category": "Sangat Sehat",
+    "vegetation_health": {
+      "ndvi_mean": 0.78,
+      "status": "Sangat Baik",
+      "description": "Kerapatan dan kehijauan kanopi vegetasi sangat lebat dan sehat."
+    },
+    "tree_performance": {
+      "trees_planted": 50000,
+      "trees_survived": 48500,
+      "survival_rate_pct": 97.0,
+      "status": "Optimal",
+      "avg_height_growth_cm": 60.0,
+      "avg_dbh_growth_cm": 3.5
+    },
+    "carbon": {
+      "carbon_stock_tco2e": 45000.0,
+      "estimated_co2e": 165000.0,
+      "carbon_density_tco2e_per_ha": 30.0,
+      "methodology": "IPCC Tier 2 Wetland Supplement"
+    },
+    "biodiversity": {
+      "unique_species_count": 8,
+      "fauna_count": 5,
+      "flora_count": 3,
+      "richness_index": "Sedang"
+    },
+    "community": {
+      "total_beneficiaries": 350,
+      "total_villages": 3,
+      "total_investment_usd": 25000.0
+    }
+  }
+  ```
+
+#### B. Komparasi Kondisi Saat Ini vs Baseline Awal Tanam
+- **Method / URL**: `GET /api/v1/projects/{project_id}/compare/baseline`
+- **Response `200 OK`**:
+  ```json
+  {
+    "project_id": 1,
+    "project_name": "Restorasi Gambut Sebangau",
+    "baseline_date": "2023-01-10",
+    "current_date": "2026-08-31",
+    "summary_narrative": "Sejak baseline (2023-01-10), proyek 'Restorasi Gambut Sebangau' mencatatkan peningkatan pada 5 dari 5 indikator utama.",
+    "metrics": [
+      {
+        "metric_name": "Tutupan Hutan (Forest Cover)",
+        "unit": "ha",
+        "baseline_value": 800.0,
+        "current_value": 1150.0,
+        "change_value": 350.0,
+        "change_pct": 43.8,
+        "status": "improved"
+      },
+      {
+        "metric_name": "Indeks Vegetasi (NDVI)",
+        "unit": "index",
+        "baseline_value": 0.55,
+        "current_value": 0.78,
+        "change_value": 0.23,
+        "change_pct": 41.8,
+        "status": "improved"
+      },
+      {
+        "metric_name": "Rata-rata Tinggi Pohon",
+        "unit": "cm",
+        "baseline_value": 50.0,
+        "current_value": 110.0,
+        "change_value": 60.0,
+        "change_pct": 120.0,
+        "status": "improved"
+      }
+    ]
+  }
+  ```
+
+---
+
+### 📊 MODUL 6: Multi-Project Comparison Matrix
+
+- **Method / URL**: `GET /api/v1/projects/compare?project_ids=1,2,3`
+- **Response `200 OK`**:
+  ```json
+  {
+    "total_projects": 2,
+    "projects": [
+      {
+        "project_id": 1,
+        "name": "Restorasi Gambut Sebangau",
+        "location_name": "Palangkaraya, Kalteng",
+        "project_type": "peatland",
+        "area_ha": 1500.0,
+        "status": "active",
+        "overall_progress_pct": 65.5,
+        "trees_planted": 50000,
+        "survival_rate_pct": 97.0,
+        "carbon_stock_tco2e": 45000.0,
+        "species_recorded": 8,
+        "active_alerts_count": 0
+      },
+      {
+        "project_id": 2,
+        "name": "Konservasi Mangrove Teluk Bintuni",
+        "location_name": "Teluk Bintuni, Papua Barat",
+        "project_type": "mangrove",
+        "area_ha": 3000.0,
+        "status": "active",
+        "overall_progress_pct": 30.0,
+        "trees_planted": 120000,
+        "survival_rate_pct": 92.0,
+        "carbon_stock_tco2e": 85000.0,
+        "species_recorded": 14,
+        "active_alerts_count": 1
+      }
+    ],
+    "benchmarks": {
+      "highest_tree_survival": { "project_id": 1, "project_name": "Restorasi Gambut Sebangau", "value": "97.0%" },
+      "most_trees_planted": { "project_id": 2, "project_name": "Konservasi Mangrove Teluk Bintuni", "value": "120,000 pohon" },
+      "highest_species_richness": { "project_id": 2, "project_name": "Konservasi Mangrove Teluk Bintuni", "value": "14 spesies" }
+    }
+  }
+  ```
+
+---
+
+### 🚨 MODUL 7: Early Warning Alert System
+
+#### A. Trigger Evaluasi 5 Aturan Alert Dini
+- **Method / URL**: `POST /api/v1/projects/{project_id}/alerts/check`
+- **Response `200 OK`**:
+  ```json
+  {
+    "project_id": 1,
+    "evaluated_rules": 5,
+    "new_alerts_created": ["monitoring_overdue"],
+    "total_active_alerts": 1,
+    "message": "Evaluasi 5 aturan alert selesai. 1 alert baru dibuat."
+  }
+  ```
+
+#### B. Ringkasan Statistik Alert & Resolution Rate
+- **Method / URL**: `GET /api/v1/projects/{project_id}/alerts/summary`
+- **Response `200 OK`**:
+  ```json
+  {
+    "project_id": 1,
+    "total_alerts": 4,
+    "active_alerts": 1,
+    "resolved_alerts": 3,
+    "resolution_rate_pct": 75.0,
+    "by_severity": { "critical": 0, "high": 1, "medium": 3, "low": 0 },
+    "by_type": {
+      "deforestation": 0,
+      "fire": 0,
+      "land_cover_change": 0,
+      "monitoring_overdue": 3,
+      "low_tree_survival": 1
+    },
+    "latest_alerts": [...]
+  }
+  ```
+
+#### C. Resolve Alert (Tandai Selesai)
+- **Method / URL**: `PUT /api/v1/projects/{project_id}/alerts/{alert_id}`
+- **Request Body**:
+  ```json
+  {
+    "is_resolved": true,
+    "is_read": true
+  }
+  ```
+
+---
+
+### 📄 MODUL 8: MRV Executive Summary & Export
+
+#### A. Ringkasan Eksekutif MRV (Measurement, Reporting, Verification)
+- **Method / URL**: `GET /api/v1/projects/{project_id}/report/summary`
+- **Response `200 OK`**:
+  ```json
+  {
+    "project_id": 1,
+    "project_name": "Restorasi Gambut Sebangau",
+    "location_name": "Palangkaraya, Kalteng",
+    "project_type": "peatland",
+    "area_ha": 1500.0,
+    "start_date": "2023-01-01",
+    "status": "active",
+    "generated_at": "2026-08-31T11:45:00Z",
+    "measurement": {
+      "trees_planted": 50000,
+      "trees_survived": 48500,
+      "survival_rate_pct": 97.0,
+      "avg_height_growth_cm": 60.0,
+      "avg_dbh_growth_cm": 3.5,
+      "forest_cover_ha": 1150.0,
+      "deforestation_ha": 0.0,
+      "ndvi_mean": 0.78,
+      "carbon_stock_tco2e": 45000.0,
+      "estimated_co2e": 165000.0,
+      "unique_species_count": 8
+    },
+    "reporting": {
+      "overall_progress_pct": 65.5,
+      "targets": { "tree_planting": 100000, "restoration_ha": 1000 },
+      "total_activities": 8,
+      "activities_by_type": { ... },
+      "total_field_reports": 15,
+      "latest_field_report_date": "2026-01-20T10:00:00Z"
+    },
+    "verification": {
+      "total_photos_count": 28,
+      "total_videos_count": 4,
+      "gps_verified_points_count": 35,
+      "satellite_snapshots_count": 6,
+      "total_alerts": 4,
+      "active_alerts": 1,
+      "resolved_alerts": 3,
+      "resolution_rate_pct": 75.0
+    },
+    "executive_summary": "Laporan MRV untuk proyek 'Restorasi Gambut Sebangau' (Palangkaraya, Kalteng). Proyek telah menanam 50,000 pohon dengan survival rate 97.0% dan progress keseluruhan 65.5%."
+  }
+  ```
+
+#### B. Download PDF Laporan Monitoring Resmi
+- **Method / URL**: `GET /api/v1/projects/{project_id}/report/pdf`
+- **Response Headers**:
+  - `Content-Type`: `application/pdf`
+  - `Content-Disposition`: `attachment; filename="satubumi_monitor_report_1_20260831.pdf"`
+
+#### C. Export Data Tabular ke CSV
+- **Method / URL**: `GET /api/v1/projects/{project_id}/export/csv?data_type=trees`
+- **Query Params**: `data_type` (`trees`, `activities`, `field_reports`, `biodiversity`, `carbon`, `overview`)
+- **Response Headers**:
+  - `Content-Type`: `text/csv; charset=utf-8`
+
+#### D. Export Multi-Layer Spasial ke GeoJSON
+- **Method / URL**: `GET /api/v1/projects/{project_id}/export/geojson`
+- **Response Headers**:
+  - `Content-Type`: `application/geo+json`
+
+---
+
+## 🛠️ 4. TypeScript Interface Definitions (Siap Copas ke Frontend)
+
+```typescript
+// ── GeoJSON Interfaces ──
+export interface GeoJSONGeometry {
+  type: 'Point' | 'Polygon' | 'MultiPolygon' | 'LineString';
+  coordinates: any;
+}
+
+export interface GeoJSONFeature<T = Record<string, any>> {
+  type: 'Feature';
+  geometry: GeoJSONGeometry;
+  properties: T;
+}
+
+export interface GeoJSONFeatureCollection<T = Record<string, any>> {
+  type: 'FeatureCollection';
+  total_features: number;
+  features: GeoJSONFeature<T>[];
+}
+
+// ── GIS Map Layers ──
+export interface ProjectMapLayersResponse {
+  project_id: number;
+  project_name: string;
+  boundary: GeoJSONFeature | null;
+  plots: GeoJSONFeatureCollection;
+  activities: GeoJSONFeatureCollection;
+  tree_locations: GeoJSONFeatureCollection;
+  alerts: GeoJSONFeatureCollection;
+  field_reports: GeoJSONFeatureCollection;
+  biodiversity: GeoJSONFeatureCollection;
+  summary: {
+    has_boundary: boolean;
+    total_plots: number;
+    total_activities: number;
+    total_tree_batches: number;
+    total_alerts: number;
+    total_field_reports: number;
+    total_biodiversity: number;
+    center_coordinates: [number, number] | null; // [lng, lat]
+  };
+}
+
+// ── Project Indicators ──
+export interface ProjectIndicatorsResponse {
+  project_id: number;
+  project_name: string;
+  project_type: string | null;
+  evaluated_at: string;
+  overall_health_score: number; // 0.0 - 100.0
+  health_category: 'Sangat Sehat' | 'Sehat' | 'Perlu Perhatian' | 'Kritis';
+  vegetation_health: {
+    ndvi_mean: number | null;
+    status: string;
+    description: string;
+  };
+  tree_performance: {
+    trees_planted: number;
+    trees_survived: number;
+    survival_rate_pct: number;
+    status: 'Optimal' | 'Waspada' | 'Kritis';
+    avg_height_growth_cm: number | null;
+    avg_dbh_growth_cm: number | null;
+  };
+  carbon: {
+    carbon_stock_tco2e: number | null;
+    estimated_co2e: number | null;
+    carbon_density_tco2e_per_ha: number | null;
+    methodology: string | null;
+  };
+  biodiversity: {
+    unique_species_count: number;
+    fauna_count: number;
+    flora_count: number;
+    richness_index: 'Tinggi' | 'Sedang' | 'Rendah';
+  };
+  community: {
+    total_beneficiaries: number;
+    total_villages: number;
+    total_investment_usd: number;
+  };
+}
+
+// ── Tree Growth Timeline ──
+export interface TreeGrowthResponse {
+  tree_id: number;
+  species: string;
+  initial_planting_date: string | null;
+  initial_height_cm: number | null;
+  initial_dbh_cm: number | null;
+  current_height_cm: number | null;
+  current_dbh_cm: number | null;
+  height_growth_delta_cm: number | null;
+  dbh_growth_delta_cm: number | null;
+  current_condition: string;
+  is_alive: boolean;
+  total_measurements: number;
+  timeline: Array<{
+    date: string;
+    height_cm: number | null;
+    dbh_cm: number | null;
+    condition: string;
+    is_alive: boolean;
+    measured_by?: string;
+  }>;
+}
+
+// ── MRV Summary ──
+export interface MRVSummaryResponse {
+  project_id: number;
+  project_name: string;
+  location_name: string;
+  project_type: string | null;
+  area_ha: number | null;
+  start_date: string | null;
+  status: string;
+  generated_at: string;
+  measurement: {
+    trees_planted: number;
+    trees_survived: number;
+    survival_rate_pct: number;
+    avg_height_growth_cm: number | null;
+    avg_dbh_growth_cm: number | null;
+    forest_cover_ha: number | null;
+    deforestation_ha: number | null;
+    ndvi_mean: number | null;
+    carbon_stock_tco2e: number | null;
+    estimated_co2e: number | null;
+    unique_species_count: number;
+  };
+  reporting: {
+    overall_progress_pct: number;
+    targets: Record<string, any>;
+    total_activities: number;
+    activities_by_type: Record<string, any>;
+    total_field_reports: number;
+    latest_field_report_date: string | null;
+  };
+  verification: {
+    total_photos_count: number;
+    total_videos_count: number;
+    gps_verified_points_count: number;
+    satellite_snapshots_count: number;
+    total_alerts: number;
+    active_alerts: number;
+    resolved_alerts: number;
+    resolution_rate_pct: number;
+  };
+  executive_summary: string;
 }
 ```
