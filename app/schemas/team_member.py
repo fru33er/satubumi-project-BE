@@ -1,9 +1,9 @@
-from pydantic import BaseModel
 from typing import Optional
+
+from pydantic import BaseModel
 
 
 class TeamMemberBase(BaseModel):
-
     name: str
     role: str
     description: Optional[str] = None
@@ -16,7 +16,6 @@ class TeamMemberCreate(TeamMemberBase):
 
 
 class TeamMemberUpdate(BaseModel):
-
     name: Optional[str] = None
     role: Optional[str] = None
     description: Optional[str] = None
@@ -25,7 +24,6 @@ class TeamMemberUpdate(BaseModel):
 
 
 class TeamMemberResponse(TeamMemberBase):
-
     id: int
     image_url: Optional[str] = None
 

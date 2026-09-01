@@ -4,10 +4,10 @@ import shutil
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.core.activity import create_activity_log
 from app.core.database import get_db
 from app.core.dependencies import require_super_admin
 from app.core.security import get_password_hash
-from app.core.activity import create_activity_log
 from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 

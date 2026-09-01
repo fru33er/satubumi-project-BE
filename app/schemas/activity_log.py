@@ -1,10 +1,10 @@
-from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 
+from pydantic import BaseModel
+
 
 class ActivityLogResponse(BaseModel):
-
     id: int
 
     user_id: int | None
@@ -25,12 +25,11 @@ class ActivityLogResponse(BaseModel):
 
     created_at: datetime
 
-
     class Config:
         from_attributes = True
 
-class ActivityLogMyResponse(BaseModel):
 
+class ActivityLogMyResponse(BaseModel):
     id: int
 
     user_id: Optional[int]
@@ -46,7 +45,6 @@ class ActivityLogMyResponse(BaseModel):
     description: Optional[str]
 
     created_at: datetime
-
 
     class Config:
         from_attributes = True
