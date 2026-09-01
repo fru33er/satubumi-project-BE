@@ -1,16 +1,6 @@
 from datetime import datetime
-
 from sqlalchemy import (
-    JSON,
-    Boolean,
-    Column,
-    Date,
-    DateTime,
-    Float,
-    ForeignKey,
-    Integer,
-    String,
-    Text,
+    Column, Integer, String, Float, DateTime, Date, ForeignKey, Text, JSON, Boolean, UniqueConstraint
 )
 
 from app.core.database import Base
@@ -55,29 +45,55 @@ class ProjectActivity(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class MonitoringPlot(Base):
+    """
+    Plot monitoring yang digunakan untuk pengambilan data di lapangan.
+    Bisa berupa permanent plot, transect, atau point sampling.
+    Plot ini menjadi referensi untuk tree_records dan field_reports.
+    """
+    __tablename__ = "monitoring_plots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    plot_code = Column(String(100), nullable=False)   # Kode unik plot, misal "WK-023"
+    plot_name = Column(String(255), nullable=True)    # Nama deskriptif plot
+    plot_type = Column(String(50), nullable=True)     # permanent_plot, transect, point
+
+    location_geojson = Column(JSON, nullable=True)    # GeoJSON Point atau Polygon
+    area_ha = Column(Float, nullable=True)            # Luas plot dalam ha
+
+    # Status: active, inactive
+    status = Column(String(50), default="active", nullable=False)
+    notes = Column(Text, nullable=True)
+
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class TreeRecord(Base):
     """
     Data tanam per-batch atau per-plot untuk monitoring pohon/restorasi.
+    Satu record mewakili satu batch penanaman (misal: 500 pohon Shorea di plot WK-023).
     Dashboard menghitung Trees Planted, Survived, Dead, Survival Rate dari tabel ini.
+
+    Untuk tracking growth history per-batch, gunakan tabel tree_measurements.
     """
 
     __tablename__ = "tree_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(
-        Integer,
-        ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    plot_id = Column(String(100), nullable=True)  # Kode plot, misal "WK-023"
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    plot_id = Column(String(100), nullable=True)    # Kode plot, misal "WK-023" (referensi ke monitoring_plots.plot_code)
+
 
     species = Column(String(255), nullable=False)
     quantity = Column(Integer, nullable=False)  # Jumlah pohon dalam batch ini
     planting_date = Column(Date, nullable=False)
     location_geojson = Column(JSON, nullable=True)  # GeoJSON Point lokasi plot
 
-    # Data monitoring kondisi pohon
+    # Data monitoring kondisi pohon (nilai snapshot terakhir)
     condition = Column(String(50), default="healthy")  # healthy, stressed, dead
     height_cm = Column(Float, nullable=True)
     dbh_cm = Column(Float, nullable=True)  # Diameter Breast Height
@@ -87,8 +103,39 @@ class TreeRecord(Base):
     notes = Column(Text, nullable=True)
     last_monitored = Column(DateTime, nullable=True)
 
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # [NEW] siapa yang input data
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TreeMeasurement(Base):
+    """
+    History pengukuran pohon per-batch (growth tracking).
+    Setiap kali ada monitoring berkala, tambah record baru di tabel ini
+    tanpa menimpa data di tree_records — sehingga growth history terjaga.
+
+    Contoh timeline:
+      - 2024-01-01: height=45cm, dbh=3.2cm (penanaman awal)
+      - 2024-07-01: height=78cm, dbh=5.1cm (monitoring 6 bulan)
+      - 2025-01-01: height=120cm, dbh=8.4cm (monitoring 1 tahun)
+    """
+    __tablename__ = "tree_measurements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tree_record_id = Column(Integer, ForeignKey("tree_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    measurement_date = Column(Date, nullable=False)
+    height_cm = Column(Float, nullable=True)
+    dbh_cm = Column(Float, nullable=True)              # Diameter Breast Height (cm)
+    condition = Column(String(50), nullable=True)      # healthy, stressed, dead
+    is_alive = Column(Boolean, default=True)
+
+    measured_by = Column(String(255), nullable=True)   # Nama petugas yang mengukur
+    photo_urls = Column(JSON, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class FieldReport(Base):
@@ -119,6 +166,11 @@ class FieldReport(Base):
     activity_description = Column(Text, nullable=True)
     result_description = Column(Text, nullable=True)
     photo_urls = Column(JSON, nullable=True)
+    video_urls = Column(JSON, nullable=True)             # [NEW] URL video lapangan
+
+    # [NEW] Link opsional ke data monitoring terkait
+    tree_record_id = Column(Integer, ForeignKey("tree_records.id"), nullable=True)
+    biodiversity_id = Column(Integer, ForeignKey("biodiversity_observations.id"), nullable=True)
 
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -155,6 +207,12 @@ class Alert(Base):
 
     # True jika alert dibuat otomatis oleh sistem (bukan manual dari admin)
     auto_generated = Column(Boolean, default=False)
+
+    # [NEW] Siapa yang membuat alert (untuk alert manual)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # [NEW] URL sumber data yang memicu alert (GEE, satellite data, dll)
+    source_url = Column(String(500), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -248,3 +306,66 @@ class CarbonRecord(Base):
     notes = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LandscapeSnapshot(Base):
+    """
+    Snapshot kondisi tutupan lahan/hutan pada suatu waktu tertentu.
+    Digunakan untuk time-series monitoring perubahan lanskap:
+    deforestasi, restorasi, perubahan tutupan lahan, NDVI.
+
+    Data bisa diinput manual atau di-fetch dari Google Earth Engine.
+    Bandingkan dua snapshot untuk melihat perubahan antar periode.
+    """
+    __tablename__ = "landscape_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    snapshot_date = Column(Date, nullable=False)
+
+    # Sumber data: GEE (Google Earth Engine), manual, satellite, report
+    data_source = Column(String(100), nullable=True, default="manual")
+
+    # Data tutupan lahan (dalam hektare)
+    forest_cover_ha = Column(Float, nullable=True)
+    deforestation_ha = Column(Float, nullable=True)
+    restoration_ha = Column(Float, nullable=True)
+    land_cleared_ha = Column(Float, nullable=True)
+    fire_ha = Column(Float, nullable=True)
+
+    # Indeks vegetasi NDVI (0.0 - 1.0)
+    ndvi_mean = Column(Float, nullable=True)
+    ndvi_min = Column(Float, nullable=True)
+    ndvi_max = Column(Float, nullable=True)
+
+    # Data spasial raw (GeoJSON layer atau metadata dari GEE)
+    geojson_data = Column(JSON, nullable=True)
+
+    notes = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ProjectMember(Base):
+    """
+    Relasi user ke proyek dengan role spesifik.
+    Memungkinkan assignment petugas lapangan, project manager, atau viewer
+    ke proyek tertentu tanpa mengubah role global mereka di sistem.
+    """
+    __tablename__ = "project_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Role dalam proyek: project_manager, field_officer, viewer
+    role = Column(String(50), nullable=False, default="viewer")
+
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+    assigned_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "user_id", name="uq_project_member"),
+    )
+

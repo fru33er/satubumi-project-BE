@@ -55,3 +55,7 @@ extracted_*.txt
 # OS Junk
 .DS_Store
 Thumbs.db
+
+# Scratch tests
+scratch/
+
