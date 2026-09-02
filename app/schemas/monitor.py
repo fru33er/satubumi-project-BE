@@ -106,13 +106,19 @@ class TreeRecordCreate(BaseModel):
 
 
 class TreeRecordUpdate(BaseModel):
-    """Request body untuk update kondisi pohon (monitoring berkala)."""
+    """Request body untuk update kondisi dan data tanam pohon."""
+    plot_id: Optional[str] = Field(None, max_length=100, description="Kode plot, misal WK-023")
+    species: Optional[str] = Field(None, max_length=255, description="Jenis/spesies pohon")
+    quantity: Optional[int] = Field(None, gt=0, description="Jumlah pohon dalam batch ini")
+    planting_date: Optional[date] = Field(None, description="Tanggal penanaman")
+    location_geojson: Optional[Dict[str, Any]] = Field(None, description="Lokasi plot (GeoJSON Point)")
     condition: Optional[str] = Field(None, description="Kondisi: healthy, stressed, dead")
-    height_cm: Optional[float] = None
-    dbh_cm: Optional[float] = None
-    is_alive: Optional[bool] = None
-    photo_urls: Optional[List[str]] = None
-    notes: Optional[str] = None
+    height_cm: Optional[float] = Field(None, description="Tinggi pohon (cm)")
+    dbh_cm: Optional[float] = Field(None, description="Diameter Breast Height (cm)")
+    is_alive: Optional[bool] = Field(None, description="Status hidup pohon")
+    photo_urls: Optional[List[str]] = Field(None, description="List URL foto")
+    notes: Optional[str] = Field(None, description="Catatan tambahan / koreksi")
+
 
 
 class TreeRecordResponse(BaseModel):
