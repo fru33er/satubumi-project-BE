@@ -532,7 +532,7 @@ def update_tree_record(
 
     Setelah update, sistem otomatis mengecek survival rate dan membuat alert jika diperlukan.
     """
-    require_admin(current_user)
+    require_field_officer(current_user)
     get_project_or_404(project_id, db)
 
     record = (

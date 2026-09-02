@@ -199,8 +199,56 @@ PROJECT ➔ MAP ➔ MONITOR ➔ MEASURE ➔ COMPARE ➔ ALERT ➔ REPORT (MRV)
   ```
 - **Daftar Plot**: `GET /api/v1/projects/{project_id}/plots`
 
-#### B. Catat Pengukuran Berkala Pohon
+#### B. Update / Koreksi Data Tanam & Kondisi Pohon
+- **Method / URL**: `PUT /api/v1/projects/{project_id}/trees/{tree_id}`
+- **Auth**: `Bearer Token` (`field_officer`, `admin`, `super_admin`)
+- **Request Body** (Semua field opsional, hanya kirim field yang ingin diupdate):
+  ```json
+  {
+    "species": "Shorea balangeran",
+    "quantity": 15,
+    "planting_date": "2026-09-02",
+    "plot_id": "PL-SBG-01",
+    "location_geojson": {
+      "type": "Point",
+      "coordinates": [113.85, -2.23]
+    },
+    "condition": "stressed",
+    "height_cm": 120.5,
+    "dbh_cm": 7.2,
+    "is_alive": true,
+    "photo_urls": [
+      "https://storage.satubumi.org/evidence/tree_update_01.jpg"
+    ],
+    "notes": "koreksi jumlah dan kondisi pohon terkini"
+  }
+  ```
+- **Response `200 OK`**:
+  ```json
+  {
+    "id": 10,
+    "project_id": 1,
+    "plot_id": "PL-SBG-01",
+    "species": "Shorea balangeran",
+    "quantity": 15,
+    "planting_date": "2026-09-02",
+    "location_geojson": { "type": "Point", "coordinates": [113.85, -2.23] },
+    "condition": "stressed",
+    "height_cm": 120.5,
+    "dbh_cm": 7.2,
+    "is_alive": true,
+    "photo_urls": ["https://storage.satubumi.org/evidence/tree_update_01.jpg"],
+    "notes": "koreksi jumlah dan kondisi pohon terkini",
+    "last_monitored": "2026-09-02T15:10:00Z",
+    "created_by": 2,
+    "created_at": "2026-01-10T08:00:00Z",
+    "updated_at": "2026-09-02T15:10:00Z"
+  }
+  ```
+
+#### C. Catat Pengukuran Berkala Pohon
 - **Method / URL**: `POST /api/v1/projects/{project_id}/trees/{tree_id}/measurements`
+
 - **Request Body**:
   ```json
   {
@@ -643,6 +691,24 @@ export interface TreeGrowthResponse {
     is_alive: boolean;
     measured_by?: string;
   }>;
+}
+
+// ── Tree Record & Update ──
+export interface TreeRecordUpdatePayload {
+  plot_id?: string;
+  species?: string;
+  quantity?: number;
+  planting_date?: string; // YYYY-MM-DD
+  location_geojson?: {
+    type: 'Point';
+    coordinates: [number, number]; // [lng, lat]
+  };
+  condition?: 'healthy' | 'stressed' | 'dead';
+  height_cm?: number;
+  dbh_cm?: number;
+  is_alive?: boolean;
+  photo_urls?: string[];
+  notes?: string;
 }
 
 // ── MRV Summary ──
