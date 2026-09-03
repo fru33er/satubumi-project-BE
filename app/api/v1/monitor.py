@@ -31,7 +31,7 @@ from app.schemas.monitor import (
     MRVSummaryResponse,
 )
 from app.api.v1.auth import get_current_user
-from app.core.dependencies import require_admin, require_field_officer
+from app.core.dependencies import require_admin, require_field_officer, get_project_or_404
 from app.services.alert_service import (
     check_and_create_survival_alert, check_and_create_overdue_alert,
     check_all_project_alerts, get_alerts_summary
@@ -44,15 +44,6 @@ from app.services.compare_service import compare_project_with_baseline, compare_
 from app.services.monitor_report_service import generate_mrv_summary, generate_monitor_pdf, export_project_data_csv
 
 router = APIRouter(prefix="/projects", tags=["Monitor — Data"])
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def get_project_or_404(project_id: int, db: Session) -> Project:
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Proyek tidak ditemukan.")
-    return project
 
 
 # ─────────────────────────────────────────────
@@ -74,7 +65,7 @@ def get_dashboard(
 
     Endpoint ini juga men-trigger auto-check untuk alert monitoring_overdue.
     """
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
 
     # Auto-check monitoring overdue
     check_and_create_overdue_alert(db, project_id)
@@ -216,7 +207,7 @@ def create_monitoring_plot(
     - `plot_type`: `permanent_plot`, `transect`, `point`.
     """
     require_field_officer(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     # Validasi duplikasi plot_code dalam satu project
     existing = db.query(MonitoringPlot).filter(
@@ -255,7 +246,7 @@ def list_monitoring_plots(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan daftar semua plot monitoring untuk satu proyek."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     query = db.query(MonitoringPlot).filter(MonitoringPlot.project_id == project_id)
     if status:
         query = query.filter(MonitoringPlot.status == status)
@@ -272,7 +263,7 @@ def get_monitoring_plot(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan detail satu plot monitoring berdasarkan ID."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     plot = db.query(MonitoringPlot).filter(
         MonitoringPlot.id == plot_id,
         MonitoringPlot.project_id == project_id
@@ -292,7 +283,7 @@ def update_monitoring_plot(
 ):
     """Mengupdate data plot monitoring."""
     require_field_officer(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     plot = db.query(MonitoringPlot).filter(
         MonitoringPlot.id == plot_id,
@@ -320,7 +311,7 @@ def delete_monitoring_plot(
 ):
     """Menghapus plot monitoring (hanya Admin)."""
     require_admin(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     plot = db.query(MonitoringPlot).filter(
         MonitoringPlot.id == plot_id,
@@ -352,7 +343,7 @@ def create_activity(
     `community_development`, `fire_prevention`, `forest_protection`.
     """
     require_admin(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     activity = ProjectActivity(
         project_id=project_id,
@@ -380,7 +371,7 @@ def list_activities(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan semua kegiatan untuk satu proyek, diurutkan dari terbaru."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     return (
         db.query(ProjectActivity)
         .filter(ProjectActivity.project_id == project_id)
@@ -397,7 +388,7 @@ def get_activity(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan detail satu kegiatan."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     activity = (
         db.query(ProjectActivity)
         .filter(ProjectActivity.id == activity_id, ProjectActivity.project_id == project_id)
@@ -426,7 +417,7 @@ def create_tree_record(
     Jika survival rate < 70%, alert `low_tree_survival` akan dibuat secara otomatis.
     """
     require_admin(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     record = TreeRecord(
         project_id=project_id,
@@ -463,7 +454,7 @@ def list_tree_records(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan semua record pohon untuk satu proyek."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     query = db.query(TreeRecord).filter(TreeRecord.project_id == project_id)
     if plot_id:
         query = query.filter(TreeRecord.plot_id == plot_id)
@@ -482,7 +473,7 @@ def get_tree_summary(
     Ringkasan statistik pohon proyek:
     Trees Planted, Survived, Dead, dan Survival Rate (%).
     """
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     records = db.query(TreeRecord).filter(TreeRecord.project_id == project_id).all()
 
     trees_planted = sum(r.quantity for r in records)
@@ -508,7 +499,7 @@ def get_tree_record(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan detail satu batch penanaman pohon."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     record = (
         db.query(TreeRecord)
         .filter(TreeRecord.id == tree_id, TreeRecord.project_id == project_id)
@@ -533,7 +524,7 @@ def update_tree_record(
     Setelah update, sistem otomatis mengecek survival rate dan membuat alert jika diperlukan.
     """
     require_field_officer(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     record = (
         db.query(TreeRecord)
@@ -577,7 +568,7 @@ def create_tree_measurement(
     - Men-trigger pengecekan otomatis survival rate alert.
     """
     require_field_officer(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     tree = db.query(TreeRecord).filter(
         TreeRecord.id == tree_id,
@@ -624,7 +615,7 @@ def list_tree_measurements(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan riwayat semua pengukuran untuk satu batch pohon."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     tree = db.query(TreeRecord).filter(
         TreeRecord.id == tree_id,
         TreeRecord.project_id == project_id
@@ -655,7 +646,7 @@ def get_tree_growth(
     - Pertambahan diameter (`dbh_growth_cm`): DBH terkini dikurangi DBH awal tanam.
     - Garis waktu lengkap (`timeline`): dari tanam awal hingga setiap pengukuran berkala.
     """
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     tree = db.query(TreeRecord).filter(
         TreeRecord.id == tree_id,
         TreeRecord.project_id == project_id
@@ -740,7 +731,7 @@ def create_field_report(
     **WHEN** (tanggal) + **WHAT** (aktivitas) + **EVIDENCE** (foto/video).
     """
     require_field_officer(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     report = FieldReport(
         project_id=project_id,
@@ -777,7 +768,7 @@ def list_field_reports(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan semua laporan lapangan untuk satu proyek dengan filter dan pagination."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     query = db.query(FieldReport).filter(FieldReport.project_id == project_id)
     if report_type:
         query = query.filter(FieldReport.report_type == report_type)
@@ -802,7 +793,7 @@ def get_field_report(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan detail satu laporan lapangan."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     report = (
         db.query(FieldReport)
         .filter(FieldReport.id == report_id, FieldReport.project_id == project_id)
@@ -838,7 +829,7 @@ def get_project_evidence_timeline(
     - Batch tanam pohon & pengukuran berkala
     - Observasi satwa & flora (biodiversitas)
     """
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     return get_evidence_timeline(
         db=db,
         project_id=project_id,
@@ -869,7 +860,7 @@ def get_project_evidence_map(
     - Lokasi kegiatan penanaman & plot monitoring
     - Titik observasi satwa & flora liar
     """
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     return get_evidence_map(
         db=db,
         project_id=project_id,
@@ -900,7 +891,7 @@ def get_project_alerts_summary(
     - Distribusi alert berdasarkan jenis (*Deforestation*, *Fire*, *Land Cover*, *Overdue*, *Low Survival*)
     - 5 alert terbaru
     """
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     return get_alerts_summary(db, project_id)
 
 
@@ -919,7 +910,7 @@ def run_project_alerts_check(
     5. Monitoring overdue (> 30 hari)
     """
     require_field_officer(current_user)
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
     return check_all_project_alerts(db, project)
 
 
@@ -938,7 +929,7 @@ def list_alerts(
 
     Endpoint ini juga secara otomatis mengevaluasi keterlambatan monitoring (*monitoring_overdue*).
     """
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     # Auto-check monitoring overdue setiap kali alert di-fetch
     check_and_create_overdue_alert(db, project_id)
@@ -972,7 +963,7 @@ def create_alert(
     `monitoring_overdue`, `low_tree_survival`.
     """
     require_admin(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     alert = Alert(
         project_id=project_id,
@@ -1003,7 +994,7 @@ def update_alert(
 
     Ketika `is_resolved` diset ke `true`, `resolved_at` otomatis diisi dengan waktu sekarang.
     """
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     alert = (
         db.query(Alert)
         .filter(Alert.id == alert_id, Alert.project_id == project_id)
@@ -1038,7 +1029,7 @@ def create_biodiversity_observation(
 ):
     """Mencatat observasi biodiversitas baru (satwa atau flora)."""
     require_field_officer(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     obs = BiodiversityObservation(
         project_id=project_id,
@@ -1065,7 +1056,7 @@ def list_biodiversity_observations(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan semua observasi biodiversitas untuk satu proyek."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     query = db.query(BiodiversityObservation).filter(BiodiversityObservation.project_id == project_id)
     if species_type:
         query = query.filter(BiodiversityObservation.species_type == species_type)
@@ -1079,7 +1070,7 @@ def get_biodiversity_summary(
     current_user: User = Depends(get_current_user)
 ):
     """Ringkasan biodiversitas: jumlah total observasi, spesies unik, fauna, dan flora."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     all_obs = db.query(BiodiversityObservation).filter(
         BiodiversityObservation.project_id == project_id
     ).all()
@@ -1109,7 +1100,7 @@ def create_community_data(
 ):
     """Mencatat data dampak sosial dan ekonomi proyek terhadap komunitas."""
     require_admin(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     data = CommunityData(
         project_id=project_id,
@@ -1135,7 +1126,7 @@ def list_community_data(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan semua data komunitas untuk satu proyek."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     return (
         db.query(CommunityData)
         .filter(CommunityData.project_id == project_id)
@@ -1151,7 +1142,7 @@ def get_community_summary(
     current_user: User = Depends(get_current_user)
 ):
     """Ringkasan dampak komunitas: villages, beneficiaries, livelihood groups, employment."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     all_data = db.query(CommunityData).filter(CommunityData.project_id == project_id).all()
 
     return CommunitySummary(
@@ -1180,7 +1171,7 @@ def create_carbon_record(
     **Penting**: Data ini adalah estimasi monitoring, bukan verified carbon credit.
     """
     require_admin(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     record = CarbonRecord(
         project_id=project_id,
@@ -1206,7 +1197,7 @@ def list_carbon_records(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan semua record karbon untuk satu proyek, diurutkan dari periode terbaru."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     return (
         db.query(CarbonRecord)
         .filter(CarbonRecord.project_id == project_id)
@@ -1232,7 +1223,7 @@ def create_landscape_snapshot(
     Data bisa bersumber dari input manual, Google Earth Engine, atau satelit remote sensing.
     """
     require_admin(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     snapshot = LandscapeSnapshot(
         project_id=project_id,
@@ -1263,7 +1254,7 @@ def list_landscape_snapshots(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan seluruh snapshot kondisi lanskap proyek, diurutkan dari tanggal terbaru."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     return (
         db.query(LandscapeSnapshot)
         .filter(LandscapeSnapshot.project_id == project_id)
@@ -1280,7 +1271,7 @@ def get_landscape_snapshot(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan detail satu snapshot lanskap berdasarkan ID."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     snapshot = (
         db.query(LandscapeSnapshot)
         .filter(LandscapeSnapshot.id == snapshot_id, LandscapeSnapshot.project_id == project_id)
@@ -1300,7 +1291,7 @@ def delete_landscape_snapshot(
 ):
     """Menghapus snapshot lanskap (hanya Admin)."""
     require_admin(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     snapshot = (
         db.query(LandscapeSnapshot)
@@ -1339,7 +1330,7 @@ def get_project_map_layers_endpoint(
 
     Juga menyertakan titik tengah (`center_coordinates`) untuk auto-focus peta.
     """
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
     return get_project_map_layers(db, project)
 
 
@@ -1355,7 +1346,7 @@ def get_project_satellite_map(
 
     Menghubungkan citra Sentinel-2 / Landsat resolusi tinggi beserta metrik NDVI terkini.
     """
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
 
     satellite_data = gee_service.fetch_monitoring_satellite_data(
         geojson_polygon=project.boundary_geojson,
@@ -1412,7 +1403,7 @@ def sync_project_gee_telemetry(
     - Otomatis men-generate `Alert` berkategori tinggi/kritis jika terdeteksi deforestasi atau kebakaran.
     """
     require_admin(current_user)
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
 
     result = gee_service.sync_project_gee_data(db=db, project=project, user_id=current_user.id)
     return GEESyncResponse(**result)
@@ -1439,7 +1430,7 @@ def get_project_indicators_endpoint(
     - **Community Impact Reach** (Penerima manfaat & desa)
     - **Overall Project Health Score (0 - 100)**
     """
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
     return calculate_project_indicators(db, project)
 
 
@@ -1459,7 +1450,7 @@ def get_project_baseline_comparison_endpoint(
     - Cadangan Karbon (tCO2e)
     - Keragaman Spesies Tercatat
     """
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
     return compare_project_with_baseline(db, project)
 
 
@@ -1480,7 +1471,7 @@ def get_project_mrv_summary(
     - **Reporting**: Pencapaian target vs realisasi, ringkasan aktivitas lapangan, dan histori pelaporan.
     - **Verification**: Jumlah bukti geotagged GPS, dokumentasi foto & video, serta status resolusi alert/insiden.
     """
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
     return generate_mrv_summary(db, project)
 
 
@@ -1496,7 +1487,7 @@ def download_project_monitor_pdf(
     Berisi header resmi, ringkasan eksekutif, tabel biofisik Measurement, progres Reporting,
     dan matriks Verification integritas data.
     """
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
     try:
         pdf_bytes = generate_monitor_pdf(db, project)
     except Exception as e:
@@ -1520,7 +1511,7 @@ def export_project_data_csv_endpoint(
     """
     Mengekspor data tabular monitoring proyek ke dalam format file CSV.
     """
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
     csv_string = export_project_data_csv(db, project, data_type=data_type)
 
     filename = f"satubumi_{project.id}_{data_type}_{datetime.utcnow().strftime('%Y%m%d')}.csv"
@@ -1540,7 +1531,7 @@ def export_project_geojson_endpoint(
     """
     Mengekspor seluruh lapisan spasial GIS proyek ke file GeoJSON terpadu.
     """
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
     map_layers = get_project_map_layers(db, project)
 
     filename = f"satubumi_spatial_layers_{project.id}_{datetime.utcnow().strftime('%Y%m%d')}.geojson"

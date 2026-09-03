@@ -12,10 +12,13 @@ Dokumentasi lengkap integrasi API backend untuk developer Frontend (Web & Mobile
   ```http
   Authorization: Bearer <JWT_ACCESS_TOKEN>
   ```
-- **Matriks Hak Akses (Role)**:
-  - `super_admin` / `admin`: Full akses (CRUD Proyek, GEE Sync, Manual Alert, Tambah Member).
-  - `field_officer`: Input laporan lapangan, tambah plot, catat pengukuran pohon, trigger cek alert.
-  - `viewer` / `user`: Read-only (Dashboard, Peta Spasial, Laporan MRV, Indikator).
+- **Matriks Hak Akses & Pembatasan Project Member**:
+  - `super_admin` / `admin`: Full akses ke **seluruh proyek** di sistem (CRUD Proyek, GEE Sync, Manual Alert, Tambah/Hapus Member).
+  - `client` / `field_officer`:
+    - `GET /api/v1/projects`: **HANYA** menampilkan daftar proyek tempat akun user terdaftar di tabel `project_members`.
+    - `GET /api/v1/projects/{project_id}` dan seluruh sub-resource (`/dashboard`, `/plots`, `/trees`, `/map`, `/reports`, dll): **HANYA** dapat diakses jika user merupakan anggota dari proyek tersebut. Jika bukan anggota, server mengembalikan `403 Forbidden`.
+    - `GET /api/v1/projects/compare`: Hanya mengomparasi proyek yang menjadi hak akses user (non-member dibatasi, return `403` jika tidak memiliki akses sama sekali).
+    - Tidak dapat membuat, mengupdate, menghapus proyek, atau meng-assign member (Admin only).
 
 ---
 
@@ -33,6 +36,9 @@ PROJECT ➔ MAP ➔ MONITOR ➔ MEASURE ➔ COMPARE ➔ ALERT ➔ REPORT (MRV)
 
 #### A. Ambil Daftar Proyek (Pagination & Filter)
 - **Method / URL**: `GET /api/v1/projects`
+- **Akses**:
+  - `admin` & `super_admin`: Mengambil seluruh proyek.
+  - `client` & `field_officer`: Mengambil hanya proyek yang di-assign ke user di `project_members`.
 - **Query Params**:
   - `page`: int (default `1`)
   - `limit`: int (default `20`, max `100`)
@@ -102,6 +108,42 @@ PROJECT ➔ MAP ➔ MONITOR ➔ MEASURE ➔ COMPARE ➔ ALERT ➔ REPORT (MRV)
       }
     ]
   }
+  ```
+
+#### C. Project Members (Assign, List, Remove)
+- **Role Akses**: `admin`, `super_admin`
+- **1. List Member Proyek**: `GET /api/v1/projects/{project_id}/members`
+- **2. Assign User ke Proyek**: `POST /api/v1/projects/{project_id}/members`
+  - **Payload Body**:
+    ```json
+    {
+      "user_id": 3,
+      "role": "field_officer"
+    }
+    ```
+  - **Pilihan `role`**: `"project_manager"`, `"field_officer"`, `"viewer"`
+- **3. Hapus Member dari Proyek**: `DELETE /api/v1/projects/{project_id}/members/{user_id}`
+
+#### D. Daftar User (Untuk Dropdown Pilih User saat Assign Member)
+- **Method / URL**: `GET /api/v1/users`
+- **Role Akses**: `admin`, `super_admin`
+- **Query Params (Opsional)**:
+  - `role`: string (`admin`, `field_officer`, `client`, etc.)
+  - `is_active`: boolean (`true` / `false`)
+- **Response `200 OK`** (Tanpa `hashed_password`):
+  ```json
+  [
+    {
+      "id": 1,
+      "email": "budi@satubumi.org",
+      "full_name": "Budi Santoso",
+      "phone_number": "08123456789",
+      "role": "field_officer",
+      "profile_image": "/static/profile/user_1.png",
+      "is_active": true,
+      "created_at": "2026-01-15T09:00:00Z"
+    }
+  ]
   ```
 
 ---

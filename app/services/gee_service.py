@@ -109,6 +109,32 @@ class GEEService:
             logger.error(f"Error saat merunning GEE query: {e}. Menggunakan fallback mock values.")
             return self._get_mock_spatial_metrics(area_ha)
 
+    def _get_mock_spatial_metrics(self, area_ha: float) -> Dict[str, Any]:
+        """
+        Mock data ekstraksi 9 layer spasial overlay GEE jika mode live GEE tidak aktif
+        atau tidak tersedia kredensial service account.
+        """
+        mean_ndvi = 0.74
+        cf_derived = 160.0 if mean_ndvi > 0.6 else (100.0 if mean_ndvi > 0.4 else 60.0)
+        er_derived = 6.5 if mean_ndvi > 0.6 else 4.0
+
+        return {
+            "data_source": "Satubumi Earth Engine Simulation Engine v2.0 (Fallback Mock)",
+            "cf": cf_derived,
+            "er": er_derived,
+            "spatial_overlay_layers": {
+                "1_tutupan_lahan": {"value": "Hutan Pepohonan Tertutup (Closed Forest)", "fungsi": "Menentukan biomassa dasar"},
+                "2_ndvi": {"value": 0.74, "fungsi": "Menentukan kerapatan vegetasi"},
+                "3_ketinggian_m": {"value": 145.0, "fungsi": "Menentukan zona ekologis"},
+                "4_gambut": {"value": False, "fungsi": "Menentukan potensi karbon tanah"},
+                "5_mangrove": {"value": False, "fungsi": "Menentukan potensi karbon biru"},
+                "6_riwayat_kebakaran_count": {"value": 0, "fungsi": "Menentukan risiko kebakaran"},
+                "7_aksesibilitas_score": {"value": 85.0, "fungsi": "Menentukan kemudahan akses jalan"},
+                "8_kepadatan_penduduk_per_km2": {"value": 12.5, "fungsi": "Menentukan risiko sosial"},
+                "9_kawasan_hutan_status": {"value": "Kawasan Hutan Produksi (HP)", "fungsi": "Menentukan kelayakan legalitas hukum"}
+            }
+        }
+
     def _map_landcover_code(self, code: int) -> str:
         mapping = {
             110: "Hutan Pepohonan Tertutup (Closed Forest)",

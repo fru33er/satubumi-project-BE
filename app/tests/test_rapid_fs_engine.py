@@ -47,6 +47,39 @@ class TestRapidFSEngine(unittest.TestCase):
         self.assertEqual(result.gross_revenue_usd, 36000000.0)  # 3M * 12 = 36M USD
         self.assertEqual(result.feasibility_category, "Potensi Tinggi")
 
+    def test_gee_extract_spatial_metrics_fallback_mock(self):
+        from app.services.gee_service import gee_service
+        dummy_polygon = {
+            "type": "Polygon",
+            "coordinates": [[[110.0, -7.0], [110.1, -7.0], [110.1, -7.1], [110.0, -7.1], [110.0, -7.0]]]
+        }
+        spatial_metrics = gee_service.extract_spatial_metrics(dummy_polygon, 1500.0)
+        self.assertIsNotNone(spatial_metrics)
+        self.assertIn("spatial_overlay_layers", spatial_metrics)
+        self.assertIn("1_tutupan_lahan", spatial_metrics["spatial_overlay_layers"])
+        self.assertIn("2_ndvi", spatial_metrics["spatial_overlay_layers"])
+        self.assertIn("cf", spatial_metrics)
+        self.assertIn("er", spatial_metrics)
+
+    def test_rapid_fs_with_spatial_override(self):
+        from app.services.gee_service import gee_service
+        input_data = RapidFSInput(
+            location_name="Spatial Mode Test",
+            area_ha=2000.0,
+            ecosystem_type="hutan_tropis",
+            project_duration_years=30,
+            carbon_price_usd=10.0,
+            polygon_geojson={
+                "type": "Polygon",
+                "coordinates": [[[110.0, -7.0], [110.1, -7.0], [110.1, -7.1], [110.0, -7.1], [110.0, -7.0]]]
+            }
+        )
+        spatial_metrics = gee_service.extract_spatial_metrics(input_data.polygon_geojson, input_data.area_ha)
+        result = calculate_rapid_fs(input_data, spatial_override=spatial_metrics)
+        self.assertEqual(result.area_ha, 2000.0)
+        self.assertIsNotNone(result.spatial_overlay_layers)
+        self.assertIn("1_tutupan_lahan", result.spatial_overlay_layers)
+
 
 if __name__ == "__main__":
     unittest.main()
