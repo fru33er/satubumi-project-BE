@@ -15,20 +15,11 @@ from app.schemas.monitor import (
     MultiProjectComparisonResponse,
 )
 from app.api.v1.auth import get_current_user
-from app.core.dependencies import require_admin
+from app.core.dependencies import require_admin, get_project_or_404
 from app.services.progress_service import calculate_project_progress
 from app.services.compare_service import compare_multiple_projects
 
 router = APIRouter(prefix="/projects", tags=["Monitor — Projects"])
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def get_project_or_404(project_id: int, db: Session) -> Project:
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Proyek tidak ditemukan.")
-    return project
 
 
 # ── CRUD Proyek ───────────────────────────────────────────────────────────────
@@ -82,12 +73,20 @@ def list_projects(
     search: Optional[str] = Query(None, description="Cari berdasarkan nama atau lokasi"),
 ):
     """
-    Mendapatkan daftar semua proyek monitoring dengan pagination dan filter.
+    Mendapatkan daftar proyek monitoring dengan pagination dan filter.
 
+    - **admin** & **super_admin**: Melihat semua proyek.
+    - **client** & **field_officer**: HANYA melihat proyek yang di-assign ke akunnya (ada di project_members).
     - Mendukung filter by `status`, `project_type`, dan pencarian nama/lokasi.
     - Default: 20 proyek per halaman, urut dari terbaru.
     """
     query = db.query(Project)
+
+    # Filter akses: role non-admin hanya melihat proyek yang di-assign
+    if current_user.role not in {"admin", "super_admin"}:
+        query = query.join(ProjectMember, Project.id == ProjectMember.project_id).filter(
+            ProjectMember.user_id == current_user.id
+        )
 
     if status:
         query = query.filter(Project.status == status)
@@ -117,6 +116,8 @@ def compare_projects(
     - Jumlah pohon ditanam & survival rate (%)
     - Estimasi cadangan karbon & keragaman biodiversitas
     - Jumlah alert aktif serta benchmark performa tertinggi
+
+    User non-admin hanya dapat mengomparasi proyek yang menjadi hak aksesnya.
     """
     try:
         parsed_ids = [int(x.strip()) for x in project_ids.split(",") if x.strip()]
@@ -125,6 +126,24 @@ def compare_projects(
 
     if not parsed_ids:
         raise HTTPException(status_code=400, detail="Minimal sertakan satu ID proyek untuk dikomparasi.")
+
+    # Filter hak akses: non-admin hanya boleh compare project yang di-assign ke dirinya
+    if current_user.role not in {"admin", "super_admin"}:
+        member_project_ids = {
+            row[0]
+            for row in db.query(ProjectMember.project_id)
+            .filter(
+                ProjectMember.user_id == current_user.id,
+                ProjectMember.project_id.in_(parsed_ids)
+            )
+            .all()
+        }
+        if not member_project_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Akses ditolak. Anda tidak memiliki akses ke proyek yang dipilih."
+            )
+        parsed_ids = [pid for pid in parsed_ids if pid in member_project_ids]
 
     return compare_multiple_projects(db, parsed_ids)
 
@@ -135,8 +154,8 @@ def get_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Mendapatkan detail satu proyek berdasarkan ID."""
-    return get_project_or_404(project_id, db)
+    """Mendapatkan detail satu proyek berdasarkan ID (hanya anggota proyek / admin)."""
+    return get_project_or_404(project_id, db, current_user)
 
 
 
@@ -155,7 +174,7 @@ def update_project(
     - Field baru: `project_type`, `start_date`, `end_date`, `country`, `province`, `district`.
     """
     require_admin(current_user)
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
 
     update_data = body.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -178,7 +197,7 @@ def delete_project(
     - Hanya **admin** dan **super_admin** yang dapat menghapus proyek.
     """
     require_admin(current_user)
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
 
     db.delete(project)
     db.commit()
@@ -209,7 +228,7 @@ def get_project_progress(
     }
     ```
     """
-    project = get_project_or_404(project_id, db)
+    project = get_project_or_404(project_id, db, current_user)
     raw = calculate_project_progress(db, project)
 
     return ProgressResponse(
@@ -239,7 +258,7 @@ def add_project_member(
     - Satu user hanya bisa punya satu role per proyek (unique constraint).
     """
     require_admin(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     target_user = db.query(User).filter(User.id == body.user_id).first()
     if not target_user:
@@ -279,7 +298,7 @@ def list_project_members(
     current_user: User = Depends(get_current_user)
 ):
     """Mendapatkan daftar semua anggota yang di-assign ke proyek ini."""
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
     return db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
 
 
@@ -296,7 +315,7 @@ def remove_project_member(
     - Hanya **admin** dan **super_admin** yang dapat menghapus member.
     """
     require_admin(current_user)
-    get_project_or_404(project_id, db)
+    get_project_or_404(project_id, db, current_user)
 
     member = db.query(ProjectMember).filter(
         ProjectMember.project_id == project_id,
