@@ -1,11 +1,13 @@
 import os
 import shutil
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import require_super_admin
+from app.core.dependencies import require_admin, require_super_admin
 from app.core.security import get_password_hash
 from app.core.activity import create_activity_log
 from app.models.user import User
@@ -15,15 +17,27 @@ from app.schemas.user import UserCreate, UserResponse, UserUpdate
 ALLOWED_ROLES = {"admin", "super_admin", "client", "field_officer"}
 
 
-router = APIRouter(prefix="/users", tags=["User Management (Super Admin Only)"])
+router = APIRouter(prefix="/users", tags=["User Management"])
 
 
 @router.get("/", response_model=list[UserResponse])
 def list_users(
+    role: Optional[str] = None,
+    is_active: Optional[bool] = None,
     db: Session = Depends(get_db),
-    super_admin: User = Depends(require_super_admin),
+    current_user: User = Depends(require_admin),
 ):
-    return db.query(User).all()
+    """
+    Mendapatkan daftar semua user.
+    - Dapat diakses oleh **admin** dan **super_admin**.
+    - Field sensitif seperti `hashed_password` tidak disertakan.
+    """
+    query = db.query(User)
+    if role:
+        query = query.filter(User.role == role)
+    if is_active is not None:
+        query = query.filter(User.is_active == is_active)
+    return query.all()
 
 
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -73,8 +87,12 @@ def create_user(
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    super_admin: User = Depends(require_super_admin),
+    current_user: User = Depends(require_admin),
 ):
+    """
+    Mendapatkan detail user berdasarkan ID.
+    - Dapat diakses oleh **admin** dan **super_admin**.
+    """
     usr = db.query(User).filter(User.id == user_id).first()
     if not usr:
         raise HTTPException(status_code=404, detail="User tidak ditemukan.")

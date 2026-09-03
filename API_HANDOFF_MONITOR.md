@@ -104,6 +104,42 @@ PROJECT ➔ MAP ➔ MONITOR ➔ MEASURE ➔ COMPARE ➔ ALERT ➔ REPORT (MRV)
   }
   ```
 
+#### C. Project Members (Assign, List, Remove)
+- **Role Akses**: `admin`, `super_admin`
+- **1. List Member Proyek**: `GET /api/v1/projects/{project_id}/members`
+- **2. Assign User ke Proyek**: `POST /api/v1/projects/{project_id}/members`
+  - **Payload Body**:
+    ```json
+    {
+      "user_id": 3,
+      "role": "field_officer"
+    }
+    ```
+  - **Pilihan `role`**: `"project_manager"`, `"field_officer"`, `"viewer"`
+- **3. Hapus Member dari Proyek**: `DELETE /api/v1/projects/{project_id}/members/{user_id}`
+
+#### D. Daftar User (Untuk Dropdown Pilih User saat Assign Member)
+- **Method / URL**: `GET /api/v1/users`
+- **Role Akses**: `admin`, `super_admin`
+- **Query Params (Opsional)**:
+  - `role`: string (`admin`, `field_officer`, `client`, etc.)
+  - `is_active`: boolean (`true` / `false`)
+- **Response `200 OK`** (Tanpa `hashed_password`):
+  ```json
+  [
+    {
+      "id": 1,
+      "email": "budi@satubumi.org",
+      "full_name": "Budi Santoso",
+      "phone_number": "08123456789",
+      "role": "field_officer",
+      "profile_image": "/static/profile/user_1.png",
+      "is_active": true,
+      "created_at": "2026-01-15T09:00:00Z"
+    }
+  ]
+  ```
+
 ---
 
 ### 🗺️ MODUL 2: Spatial GIS Multi-Layer Map & Satelit
