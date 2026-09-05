@@ -507,3 +507,69 @@ def delete_article_image(
     db.commit()
     db.refresh(art)
     return serialize_article(art, "id")
+
+@router.post(
+    "/{article_id}/media",
+    summary="Upload gambar isi artikel (bukan cover)",
+)
+async def upload_article_media(
+    article_id: int,
+    file: UploadFile = File(
+        ...,
+        description="jpg, jpeg, png, webp. Maks 5 MB.",
+    ),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    art = db.query(Article).filter(Article.id == article_id).first()
+    if not art:
+        raise HTTPException(
+            status_code=404,
+            detail="Artikel tidak ditemukan.",
+        )
+
+    content_type = file.content_type or ""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+
+    if content_type not in ALLOWED_IMAGE_TYPES or ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="Format file tidak didukung. Gunakan: jpg, jpeg, png, atau webp.",
+        )
+
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    contents = await file.read()
+    if len(contents) > max_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ukuran file melebihi batas maksimal {settings.MAX_UPLOAD_SIZE_MB} MB.",
+        )
+
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+    storage_path = f"articles/media/{article_id}/{unique_filename}"
+
+    try:
+        public_url = upload_public_file(
+            path=storage_path,
+            file_bytes=contents,
+            content_type=content_type,
+        )
+    except Exception as exc:
+        print("Supabase upload error:", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="Gagal mengupload gambar ke Supabase Storage.",
+        )
+
+    create_activity_log(
+        db=db,
+        user=admin,
+        action="UPLOAD",
+        module="ARTICLE_MEDIA",
+        target_id=art.id,
+        target_name=art.title,
+        description="Mengunggah gambar isi artikel",
+    )
+    db.commit()
+
+    return {"url": public_url, "article_id": art.id}
