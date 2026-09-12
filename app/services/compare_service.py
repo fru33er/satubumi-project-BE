@@ -40,7 +40,62 @@ def compare_project_with_baseline(db: Session, project: Project) -> ProjectBasel
 
     metrics: List[BaselineComparisonMetric] = []
 
-    # 1. Metrik: Tutupan Hutan (Forest Cover)
+    # 1. Metrik: Jumlah Pohon Tertanam (Trees Planted)
+    all_trees = db.query(TreeRecord).filter(TreeRecord.project_id == project.id).all()
+    total_planted = sum(t.quantity for t in all_trees)
+    metrics.append(BaselineComparisonMetric(
+        metric_name="Jumlah Pohon (Trees Planted)",
+        unit="pohon",
+        baseline_value=0.0,
+        current_value=float(total_planted),
+        change_value=float(total_planted),
+        change_pct=100.0 if total_planted > 0 else 0.0,
+        status="improved" if total_planted > 0 else "stable"
+    ))
+
+    # 2. Metrik: Progres Restorasi (Restoration Progress)
+    progress_info = calculate_project_progress(db, project)
+    overall_progress = progress_info.get("overall_progress_pct", 0.0)
+    metrics.append(BaselineComparisonMetric(
+        metric_name="Progres Restorasi (Progress)",
+        unit="%",
+        baseline_value=0.0,
+        current_value=float(overall_progress),
+        change_value=float(overall_progress),
+        change_pct=float(overall_progress),
+        status="improved" if overall_progress > 0 else "stable"
+    ))
+
+    # 3. Metrik: Estimasi Cadangan Karbon (Carbon Stock)
+    carbons = (
+        db.query(CarbonRecord)
+        .filter(CarbonRecord.project_id == project.id)
+        .order_by(CarbonRecord.period_start.asc())
+        .all()
+    )
+    if carbons:
+        if len(carbons) == 1:
+            b_c = 0.0
+            c_c = carbons[0].carbon_stock_tco2e or 0.0
+            diff_c = c_c
+            pct_c = 100.0 if c_c > 0 else 0.0
+        else:
+            b_c = carbons[0].carbon_stock_tco2e or 0.0
+            c_c = carbons[-1].carbon_stock_tco2e or 0.0
+            diff_c = round(c_c - b_c, 2)
+            pct_c = round((diff_c / b_c * 100), 1) if b_c > 0 else 100.0
+
+        metrics.append(BaselineComparisonMetric(
+            metric_name="Cadangan Karbon (Carbon Stock)",
+            unit="tCO2e",
+            baseline_value=b_c,
+            current_value=c_c,
+            change_value=diff_c,
+            change_pct=pct_c,
+            status="improved" if diff_c >= 0 else "declined"
+        ))
+
+    # 4. Metrik: Tutupan Hutan (Forest Cover)
     snapshots = (
         db.query(LandscapeSnapshot)
         .filter(LandscapeSnapshot.project_id == project.id)
@@ -64,7 +119,7 @@ def compare_project_with_baseline(db: Session, project: Project) -> ProjectBasel
             status="improved" if diff >= 0 else "declined"
         ))
 
-        # 2. Metrik: Indeks Vegetasi (NDVI)
+        # 5. Metrik: Indeks Vegetasi (NDVI)
         b_ndvi = first_snap.ndvi_mean or 0.50
         c_ndvi = latest_snap.ndvi_mean or 0.50
         diff_ndvi = round(c_ndvi - b_ndvi, 3)
@@ -79,10 +134,8 @@ def compare_project_with_baseline(db: Session, project: Project) -> ProjectBasel
             status="improved" if diff_ndvi >= 0 else "declined"
         ))
 
-    # 3. Metrik: Tinggi Rata-rata Pohon (Average Height)
-    all_trees = db.query(TreeRecord).filter(TreeRecord.project_id == project.id).all()
+    # 6. Metrik: Tinggi Rata-rata Pohon (Average Height)
     measurements = db.query(TreeMeasurement).filter(TreeMeasurement.project_id == project.id).all()
-
     if all_trees:
         baseline_heights = [t.height_cm for t in all_trees if t.height_cm is not None]
         b_h = round(sum(baseline_heights) / len(baseline_heights), 1) if baseline_heights else None
@@ -111,29 +164,7 @@ def compare_project_with_baseline(db: Session, project: Project) -> ProjectBasel
                 status="improved" if diff_h >= 0 else "declined"
             ))
 
-    # 4. Metrik: Estimasi Cadangan Karbon (Carbon Stock)
-    carbons = (
-        db.query(CarbonRecord)
-        .filter(CarbonRecord.project_id == project.id)
-        .order_by(CarbonRecord.period_start.asc())
-        .all()
-    )
-    if carbons:
-        b_c = carbons[0].carbon_stock_tco2e or 0.0
-        c_c = carbons[-1].carbon_stock_tco2e or 0.0
-        diff_c = round(c_c - b_c, 2)
-        pct_c = round((diff_c / b_c * 100), 1) if b_c > 0 else 0.0
-        metrics.append(BaselineComparisonMetric(
-            metric_name="Cadangan Karbon (Carbon Stock)",
-            unit="tCO2e",
-            baseline_value=b_c,
-            current_value=c_c,
-            change_value=diff_c,
-            change_pct=pct_c,
-            status="improved" if diff_c >= 0 else "declined"
-        ))
-
-    # 5. Metrik: Keragaman Spesies (Species Richness)
+    # 7. Metrik: Keragaman Spesies (Species Richness)
     unique_species_count = (
         db.query(func.count(func.distinct(BiodiversityObservation.species_name)))
         .filter(BiodiversityObservation.project_id == project.id)

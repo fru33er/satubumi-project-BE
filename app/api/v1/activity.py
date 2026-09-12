@@ -1,17 +1,28 @@
-from typing import List
+from fastapi import (
+    APIRouter,
+    Depends
+)
 
-from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.v1.auth import get_current_user
+from typing import List
+
 from app.core.database import get_db
+
 from app.core.dependencies import require_super_admin
-from app.models.activity_log import ActivityLog
+from app.api.v1.auth import get_current_user
+
 from app.models.user import User
+
+from app.models.activity_log import ActivityLog
+
 from app.schemas.activity_log import (
-    ActivityLogMyResponse,
     ActivityLogResponse,
+    ActivityLogMyResponse,
 )
+
+
+
 
 router = APIRouter(
     prefix="/activity",

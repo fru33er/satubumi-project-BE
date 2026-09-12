@@ -13,9 +13,9 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
-from app.core.activity import create_activity_log
 from app.core.database import get_db
 from app.core.dependencies import require_admin
+from app.core.activity import create_activity_log
 from app.models.rulebook import Rulebook
 from app.models.rulebook_download import RulebookDownload
 from app.models.user import User

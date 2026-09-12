@@ -1,27 +1,32 @@
-import os
-import shutil
-from typing import List
-
 from fastapi import (
     APIRouter,
     Depends,
-    File,
     HTTPException,
     UploadFile,
+    File,
     status,
 )
+
 from sqlalchemy.orm import Session
 
-from app.core.activity import create_activity_log
+import os
+import shutil
+
+from typing import List
+
 from app.core.database import get_db
 from app.core.dependencies import require_super_admin
+from app.core.activity import create_activity_log
+
 from app.models.team_member import TeamMember
-from app.models.user import User
 from app.schemas.team_member import (
     TeamMemberCreate,
-    TeamMemberResponse,
     TeamMemberUpdate,
+    TeamMemberResponse,
 )
+
+from app.models.user import User
+
 
 router = APIRouter(
     prefix="/team-members",

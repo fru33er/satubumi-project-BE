@@ -63,6 +63,17 @@ class MonitoringPlot(Base):
     location_geojson = Column(JSON, nullable=True)    # GeoJSON Point atau Polygon
     area_ha = Column(Float, nullable=True)            # Luas plot dalam ha
 
+    # Standar MRV Karbon & Sensus Ekologis
+    stratum = Column(String(100), nullable=True)          # Kelas stratifikasi tutupan lahan (misal: "Hutan Sekunder Kerapatan Tinggi")
+    elevation_mdpl = Column(Float, nullable=True)         # Ketinggian dari permukaan laut (meter)
+    slope_pct = Column(Float, nullable=True)              # Kemiringan / kelerengan lahan (%)
+    shape_type = Column(String(50), default="rectangle", nullable=True) # rectangle, circle, polygon, point
+    dimension_length_m = Column(Float, nullable=True)    # Panjang plot (meter)
+    dimension_width_m = Column(Float, nullable=True)     # Lebar plot (meter)
+    azimuth_deg = Column(Float, nullable=True)           # Orientasi kompas arah plot (0 - 360)
+    established_date = Column(Date, nullable=True)        # Tanggal penetapan plot pertama kali
+    last_survey_date = Column(Date, nullable=True)        # Tanggal sensus/pengukuran lapangan terakhir
+
     # Status: active, inactive
     status = Column(String(50), default="active", nullable=False)
     notes = Column(Text, nullable=True)
@@ -86,10 +97,10 @@ class TreeRecord(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     plot_id = Column(String(100), nullable=True)    # Kode plot, misal "WK-023" (referensi ke monitoring_plots.plot_code)
-
+    tree_tag = Column(String(100), nullable=True, index=True) # Nomor Tag / ID unik pohon individual, misal "TR-001"
 
     species = Column(String(255), nullable=False)
-    quantity = Column(Integer, nullable=False)  # Jumlah pohon dalam batch ini
+    quantity = Column(Integer, nullable=False, default=1)  # Jumlah pohon (default 1 untuk individual)
     planting_date = Column(Date, nullable=False)
     location_geojson = Column(JSON, nullable=True)  # GeoJSON Point lokasi plot
 

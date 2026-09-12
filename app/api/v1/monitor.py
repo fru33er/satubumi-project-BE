@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response, File, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime, date
+import os
+import uuid
 
 from app.core.database import get_db
 from app.models.project import Project
@@ -227,6 +229,15 @@ def create_monitoring_plot(
         plot_type=body.plot_type,
         location_geojson=body.location_geojson,
         area_ha=body.area_ha,
+        stratum=body.stratum,
+        elevation_mdpl=body.elevation_mdpl,
+        slope_pct=body.slope_pct,
+        shape_type=body.shape_type or "rectangle",
+        dimension_length_m=body.dimension_length_m,
+        dimension_width_m=body.dimension_width_m,
+        azimuth_deg=body.azimuth_deg,
+        established_date=body.established_date,
+        last_survey_date=body.last_survey_date,
         status=body.status or "active",
         notes=body.notes,
         created_by=current_user.id,
@@ -422,8 +433,9 @@ def create_tree_record(
     record = TreeRecord(
         project_id=project_id,
         plot_id=body.plot_id,
+        tree_tag=body.tree_tag,
         species=body.species,
-        quantity=body.quantity,
+        quantity=body.quantity or 1,
         planting_date=body.planting_date,
         location_geojson=body.location_geojson,
         condition=body.condition or "healthy",
@@ -546,6 +558,37 @@ def update_tree_record(
     check_and_create_survival_alert(db, project_id)
 
     return record
+
+
+@router.post("/{project_id}/trees/upload-photo")
+async def upload_tree_photo(
+    project_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload foto pohon / monitoring tanaman."""
+    require_field_officer(current_user)
+    get_project_or_404(project_id, db, current_user)
+
+    upload_dir = "static/trees"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
+    unique_filename = f"tree_{project_id}_{uuid.uuid4().hex[:10]}{ext}"
+    file_path = os.path.join(upload_dir, unique_filename)
+
+    file_bytes = await file.read()
+    with open(file_path, "wb") as buffer:
+        buffer.write(file_bytes)
+
+    try:
+        from app.core.storage import upload_public_file
+        content_type = file.content_type or "image/jpeg"
+        public_url = upload_public_file(f"trees/{unique_filename}", file_bytes, content_type)
+        return {"url": public_url, "filename": unique_filename}
+    except Exception:
+        return {"url": f"/{file_path.replace(os.sep, '/')}", "filename": unique_filename}
 
 
 # ─────────────────────────────────────────────
@@ -1016,6 +1059,31 @@ def update_alert(
     return alert
 
 
+@router.delete("/{project_id}/alerts/{alert_id}", status_code=status.HTTP_200_OK)
+def delete_alert(
+    project_id: int,
+    alert_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Menghapus alert dari database oleh admin.
+    """
+    require_admin(current_user)
+    get_project_or_404(project_id, db, current_user)
+    alert = (
+        db.query(Alert)
+        .filter(Alert.id == alert_id, Alert.project_id == project_id)
+        .first()
+    )
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert tidak ditemukan.")
+
+    db.delete(alert)
+    db.commit()
+    return {"message": f"Alert #{alert_id} berhasil dihapus."}
+
+
 # ─────────────────────────────────────────────
 # BIODIVERSITY OBSERVATIONS
 # ─────────────────────────────────────────────
@@ -1085,6 +1153,61 @@ def get_biodiversity_summary(
         fauna_count=fauna_count,
         flora_count=flora_count,
     )
+
+
+@router.put("/{project_id}/biodiversity/{obs_id}", response_model=BiodiversityResponse)
+def update_biodiversity_observation(
+    project_id: int,
+    obs_id: int,
+    body: BiodiversityCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Mengubah data observasi biodiversitas."""
+    require_field_officer(current_user)
+    get_project_or_404(project_id, db, current_user)
+    obs = db.query(BiodiversityObservation).filter(
+        BiodiversityObservation.id == obs_id,
+        BiodiversityObservation.project_id == project_id
+    ).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Biodiversity observation not found")
+
+    obs.species_name = body.species_name
+    obs.species_type = body.species_type
+    obs.location_geojson = body.location_geojson
+    obs.observed_date = body.observed_date
+    obs.habitat = body.habitat
+    obs.observer = body.observer
+    obs.photo_url = body.photo_url
+    obs.notes = body.notes
+
+    db.commit()
+    db.refresh(obs)
+    return obs
+
+
+@router.delete("/{project_id}/biodiversity/{obs_id}")
+def delete_biodiversity_observation(
+    project_id: int,
+    obs_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Menghapus observasi biodiversitas."""
+    require_field_officer(current_user)
+    get_project_or_404(project_id, db, current_user)
+    obs = db.query(BiodiversityObservation).filter(
+        BiodiversityObservation.id == obs_id,
+        BiodiversityObservation.project_id == project_id
+    ).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Biodiversity observation not found")
+
+    db.delete(obs)
+    db.commit()
+    return {"message": "Biodiversity observation deleted successfully", "id": obs_id}
+
 
 
 # ─────────────────────────────────────────────

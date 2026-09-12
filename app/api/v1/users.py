@@ -1,24 +1,21 @@
-import uuid
+import os
+import shutil
+
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.core.activity import create_activity_log
 from app.core.database import get_db
 from app.core.dependencies import require_admin, require_super_admin
 from app.core.security import get_password_hash
-from app.core.storage import (
-    delete_public_file,
-    extract_public_storage_path,
-    upload_public_file,
-)
+from app.core.activity import create_activity_log
 from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
+# Role yang diizinkan di sistem
 ALLOWED_ROLES = {"admin", "super_admin", "client", "field_officer"}
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+
 
 router = APIRouter(prefix="/users", tags=["User Management"])
 
@@ -30,6 +27,11 @@ def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    """
+    Mendapatkan daftar semua user.
+    - Dapat diakses oleh **admin** dan **super_admin**.
+    - Field sensitif seperti `hashed_password` tidak disertakan.
+    """
     query = db.query(User)
     if role:
         query = query.filter(User.role == role)
@@ -77,6 +79,7 @@ def create_user(
 
     db.commit()
     db.refresh(new_user)
+
     return new_user
 
 
@@ -86,6 +89,10 @@ def get_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    """
+    Mendapatkan detail user berdasarkan ID.
+    - Dapat diakses oleh **admin** dan **super_admin**.
+    """
     usr = db.query(User).filter(User.id == user_id).first()
     if not usr:
         raise HTTPException(status_code=404, detail="User tidak ditemukan.")
@@ -173,38 +180,20 @@ async def upload_profile_image(
     super_admin: User = Depends(require_super_admin),
 ):
     usr = db.query(User).filter(User.id == user_id).first()
+
     if not usr:
         raise HTTPException(status_code=404, detail="User tidak ditemukan.")
 
-    content_type = (file.content_type or "").lower()
-    raw_name = (file.filename or "photo.jpg").lower()
-    ext = f".{raw_name.rsplit('.', 1)[-1]}" if "." in raw_name else ""
+    upload_dir = "static/profile"
+    os.makedirs(upload_dir, exist_ok=True)
 
-    if content_type not in ALLOWED_IMAGE_TYPES or ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail="File harus JPG, PNG, atau WEBP.",
-        )
+    filename = f"user_{usr.id}_{file.filename}"
+    file_path = f"{upload_dir}/{filename}"
 
-    file_bytes = await file.read()
-    if not file_bytes:
-        raise HTTPException(status_code=400, detail="File kosong.")
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
 
-    old_path = extract_public_storage_path(usr.profile_image)
-    if old_path:
-        try:
-            delete_public_file(old_path)
-        except Exception as exc:
-            print("Supabase delete profile error:", exc)
-
-    storage_path = f"users/{usr.id}/profile-{uuid.uuid4().hex}{ext}"
-    public_url = upload_public_file(
-        path=storage_path,
-        file_bytes=file_bytes,
-        content_type=content_type,
-    )
-
-    usr.profile_image = public_url
+    usr.profile_image = "/" + file_path
 
     create_activity_log(
         db=db,
@@ -219,7 +208,4 @@ async def upload_profile_image(
     db.commit()
     db.refresh(usr)
 
-    return {
-        "message": "Profile image updated",
-        "profile_image": usr.profile_image,
-    }
+    return {"message": "Profile image updated", "profile_image": usr.profile_image}

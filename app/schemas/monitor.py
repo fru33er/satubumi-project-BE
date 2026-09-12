@@ -53,6 +53,18 @@ class MonitoringPlotCreate(BaseModel):
     plot_type: Optional[str] = Field(None, max_length=50, description="Tipe plot: permanent_plot, transect, point")
     location_geojson: Optional[Dict[str, Any]] = Field(None, description="GeoJSON Point atau Polygon lokasi plot")
     area_ha: Optional[float] = Field(None, gt=0, description="Luas plot dalam ha")
+    
+    # Standar MRV Karbon
+    stratum: Optional[str] = Field(None, max_length=100, description="Kelas tutupan lahan / strata karbon")
+    elevation_mdpl: Optional[float] = Field(None, description="Ketinggian mdpl")
+    slope_pct: Optional[float] = Field(None, description="Kelerengan lahan (%)")
+    shape_type: Optional[str] = Field("rectangle", max_length=50, description="Bentuk plot: rectangle, circle, polygon, point")
+    dimension_length_m: Optional[float] = Field(None, description="Panjang plot (m)")
+    dimension_width_m: Optional[float] = Field(None, description="Lebar plot (m)")
+    azimuth_deg: Optional[float] = Field(None, description="Orientasi kompas plot (0 - 360)")
+    established_date: Optional[date] = Field(None, description="Tanggal penetapan plot")
+    last_survey_date: Optional[date] = Field(None, description="Tanggal pengukuran terakhir")
+
     status: Optional[str] = Field("active", max_length=50, description="Status: active, inactive")
     notes: Optional[str] = Field(None, description="Catatan tambahan")
 
@@ -64,6 +76,17 @@ class MonitoringPlotUpdate(BaseModel):
     plot_type: Optional[str] = Field(None, max_length=50)
     location_geojson: Optional[Dict[str, Any]] = None
     area_ha: Optional[float] = Field(None, gt=0)
+    
+    stratum: Optional[str] = Field(None, max_length=100)
+    elevation_mdpl: Optional[float] = None
+    slope_pct: Optional[float] = None
+    shape_type: Optional[str] = Field(None, max_length=50)
+    dimension_length_m: Optional[float] = None
+    dimension_width_m: Optional[float] = None
+    azimuth_deg: Optional[float] = None
+    established_date: Optional[date] = None
+    last_survey_date: Optional[date] = None
+
     status: Optional[str] = Field(None, max_length=50)
     notes: Optional[str] = None
 
@@ -77,6 +100,17 @@ class MonitoringPlotResponse(BaseModel):
     plot_type: Optional[str] = None
     location_geojson: Optional[Dict[str, Any]] = None
     area_ha: Optional[float] = None
+    
+    stratum: Optional[str] = None
+    elevation_mdpl: Optional[float] = None
+    slope_pct: Optional[float] = None
+    shape_type: Optional[str] = "rectangle"
+    dimension_length_m: Optional[float] = None
+    dimension_width_m: Optional[float] = None
+    azimuth_deg: Optional[float] = None
+    established_date: Optional[date] = None
+    last_survey_date: Optional[date] = None
+
     status: str
     notes: Optional[str] = None
     created_by: Optional[int] = None
@@ -93,8 +127,9 @@ class MonitoringPlotResponse(BaseModel):
 class TreeRecordCreate(BaseModel):
     """Request body untuk menambah data tanam pohon."""
     plot_id: Optional[str] = Field(None, max_length=100, description="Kode plot, misal WK-023")
+    tree_tag: Optional[str] = Field(None, max_length=100, description="Nomor Tag / ID fisik pohon (misal TR-001)")
     species: str = Field(..., max_length=255, description="Jenis/spesies pohon")
-    quantity: int = Field(..., gt=0, description="Jumlah pohon dalam batch ini")
+    quantity: Optional[int] = Field(1, ge=1, description="Jumlah pohon (1 untuk sensus individual)")
     planting_date: date = Field(..., description="Tanggal penanaman")
     location_geojson: Optional[Dict[str, Any]] = Field(None, description="Lokasi plot (GeoJSON Point)")
     condition: Optional[str] = Field("healthy", description="Kondisi: healthy, stressed, dead")
@@ -108,8 +143,9 @@ class TreeRecordCreate(BaseModel):
 class TreeRecordUpdate(BaseModel):
     """Request body untuk update kondisi dan data tanam pohon."""
     plot_id: Optional[str] = Field(None, max_length=100, description="Kode plot, misal WK-023")
+    tree_tag: Optional[str] = Field(None, max_length=100, description="Nomor Tag / ID fisik pohon")
     species: Optional[str] = Field(None, max_length=255, description="Jenis/spesies pohon")
-    quantity: Optional[int] = Field(None, gt=0, description="Jumlah pohon dalam batch ini")
+    quantity: Optional[int] = Field(None, ge=1, description="Jumlah pohon")
     planting_date: Optional[date] = Field(None, description="Tanggal penanaman")
     location_geojson: Optional[Dict[str, Any]] = Field(None, description="Lokasi plot (GeoJSON Point)")
     condition: Optional[str] = Field(None, description="Kondisi: healthy, stressed, dead")
@@ -125,6 +161,7 @@ class TreeRecordResponse(BaseModel):
     id: int
     project_id: int
     plot_id: Optional[str] = None
+    tree_tag: Optional[str] = None
     species: str
     quantity: int
     planting_date: date
