@@ -21,7 +21,7 @@ from app.models.monitor import (
     Alert, BiodiversityObservation, CommunityData, CarbonRecord,
     LandscapeSnapshot, MonitoringPlot
 )
-from app.services.progress_service import calculate_project_progress
+from app.services.monitoring.progress_service import calculate_project_progress
 
 
 def generate_mrv_summary(db: Session, project: Project) -> Dict[str, Any]:

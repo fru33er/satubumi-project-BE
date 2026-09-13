@@ -2,9 +2,9 @@
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.schemas.rapid_fs import RapidFSInput, RapidFSResult
-from app.services.gee_service import gee_service
-from app.services.rapid_fs_engine import calculate_rapid_fs
-from app.services.spatial_parser import parse_shapefile_zip
+from app.services.monitoring.gee_service import gee_service
+from app.services.compro.rapid_fs_engine import calculate_rapid_fs
+from app.services.compro.spatial_parser import parse_shapefile_zip
 
 router = APIRouter(prefix="/rapid-fs", tags=["Rapid-FS Engine"])
 

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.assessment import Assessment
-from app.services.pdf_generator import generate_pdf_report
+from app.services.shared.pdf_generator import generate_pdf_report
 
 router = APIRouter(prefix="/reports", tags=["PDF Reports"])
 

@@ -20,7 +20,7 @@ from app.schemas.monitor import (
     BaselineComparisonMetric, ProjectBaselineComparisonResponse,
     ProjectComparisonCard, MultiProjectComparisonResponse
 )
-from app.services.progress_service import calculate_project_progress
+from app.services.monitoring.progress_service import calculate_project_progress
 
 
 def compare_project_with_baseline(db: Session, project: Project) -> ProjectBaselineComparisonResponse:

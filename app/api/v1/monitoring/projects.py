@@ -16,8 +16,8 @@ from app.schemas.monitor import (
 )
 from app.api.v1.auth import get_current_user
 from app.core.dependencies import require_admin, get_project_or_404
-from app.services.progress_service import calculate_project_progress
-from app.services.compare_service import compare_multiple_projects
+from app.services.monitoring.progress_service import calculate_project_progress
+from app.services.monitoring.compare_service import compare_multiple_projects
 
 router = APIRouter(prefix="/projects", tags=["Monitor — Projects"])
 

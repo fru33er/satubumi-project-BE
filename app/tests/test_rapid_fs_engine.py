@@ -1,7 +1,7 @@
 import unittest
 
 from app.schemas.rapid_fs import RapidFSInput
-from app.services.rapid_fs_engine import calculate_rapid_fs
+from app.services.compro.rapid_fs_engine import calculate_rapid_fs
 
 
 class TestRapidFSEngine(unittest.TestCase):
@@ -48,7 +48,7 @@ class TestRapidFSEngine(unittest.TestCase):
         self.assertEqual(result.feasibility_category, "Potensi Tinggi")
 
     def test_gee_extract_spatial_metrics_fallback_mock(self):
-        from app.services.gee_service import gee_service
+        from app.services.monitoring.gee_service import gee_service
         dummy_polygon = {
             "type": "Polygon",
             "coordinates": [[[110.0, -7.0], [110.1, -7.0], [110.1, -7.1], [110.0, -7.1], [110.0, -7.0]]]
@@ -62,7 +62,7 @@ class TestRapidFSEngine(unittest.TestCase):
         self.assertIn("er", spatial_metrics)
 
     def test_rapid_fs_with_spatial_override(self):
-        from app.services.gee_service import gee_service
+        from app.services.monitoring.gee_service import gee_service
         input_data = RapidFSInput(
             location_name="Spatial Mode Test",
             area_ha=2000.0,

@@ -34,16 +34,16 @@ from app.schemas.monitor import (
 )
 from app.api.v1.auth import get_current_user
 from app.core.dependencies import require_admin, require_field_officer, get_project_or_404
-from app.services.alert_service import (
+from app.services.monitoring.alert_service import (
     check_and_create_survival_alert, check_and_create_overdue_alert,
     check_all_project_alerts, get_alerts_summary
 )
-from app.services.evidence_service import get_evidence_timeline, get_evidence_map
-from app.services.spatial_layer_service import get_project_map_layers
-from app.services.gee_service import gee_service
-from app.services.indicator_service import calculate_project_indicators
-from app.services.compare_service import compare_project_with_baseline, compare_multiple_projects
-from app.services.monitor_report_service import generate_mrv_summary, generate_monitor_pdf, export_project_data_csv
+from app.services.monitoring.evidence_service import get_evidence_timeline, get_evidence_map
+from app.services.monitoring.spatial_layer_service import get_project_map_layers
+from app.services.monitoring.gee_service import gee_service
+from app.services.monitoring.indicator_service import calculate_project_indicators
+from app.services.monitoring.compare_service import compare_project_with_baseline, compare_multiple_projects
+from app.services.monitoring.monitor_report_service import generate_mrv_summary, generate_monitor_pdf, export_project_data_csv
 
 router = APIRouter(prefix="/projects", tags=["Monitor — Data"])
 

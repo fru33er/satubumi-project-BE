@@ -15,15 +15,16 @@ from app.models.monitor import (
 )
 
 from app.api.v1.auth import router as auth_router
-from app.api.v1.articles import router as articles_router
+from app.api.v1.compro.articles import router as articles_router
 from app.api.v1.users import router as users_router
-from app.api.v1.rapid_fs import router as rapid_fs_router
-from app.api.v1.assessments import router as assessments_router
-from app.api.v1.reports import router as reports_router
-from app.api.v1.contact import router as contact_router
-from app.api.v1 import insight_topics, rulebooks, team_member, activity
-from app.api.v1.projects import router as projects_router
-from app.api.v1.monitor import router as monitor_router
+from app.api.v1.compro.rapid_fs import router as rapid_fs_router
+from app.api.v1.compro.assessments import router as assessments_router
+from app.api.v1.compro.reports import router as reports_router
+from app.api.v1.compro.contact import router as contact_router
+from app.api.v1.compro import insight_topics, rulebooks, team_member
+from app.api.v1.monitoring import activity
+from app.api.v1.monitoring.projects import router as projects_router
+from app.api.v1.monitoring.monitor import router as monitor_router
 
 # Buat folder upload jika belum ada
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
