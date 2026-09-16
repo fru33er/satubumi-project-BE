@@ -11,6 +11,7 @@ Mengemas seluruh data spasial proyek menjadi multi-layer GeoJSON siap render:
 7. Biodiversity Observations (Titik temuan satwa & flora liar)
 """
 
+import json
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 
@@ -21,6 +22,23 @@ from app.models.monitor import (
 from app.schemas.monitor import (
     GeoJSONFeature, GeoJSONFeatureCollection, MapLayerSummary, ProjectMapLayersResponse
 )
+
+
+def _extract_first_photo(photo_field: Any) -> Optional[str]:
+    if not photo_field:
+        return None
+    if isinstance(photo_field, list) and len(photo_field) > 0:
+        return str(photo_field[0])
+    if isinstance(photo_field, str) and photo_field.strip():
+        try:
+            parsed = json.loads(photo_field)
+            if isinstance(parsed, list) and len(parsed) > 0:
+                return str(parsed[0])
+            if isinstance(parsed, str):
+                return parsed
+        except Exception:
+            return photo_field
+    return None
 
 
 def get_project_map_layers(db: Session, project: Project) -> ProjectMapLayersResponse:
@@ -82,6 +100,7 @@ def get_project_map_layers(db: Session, project: Project) -> ProjectMapLayersRes
     activity_features = []
     for a in activity_records:
         if a.location_geojson and isinstance(a.location_geojson, dict):
+            first_photo = _extract_first_photo(a.photo_urls)
             feat = GeoJSONFeature(
                 type="Feature",
                 geometry=a.location_geojson,
@@ -94,6 +113,9 @@ def get_project_map_layers(db: Session, project: Project) -> ProjectMapLayersRes
                     "unit": a.unit,
                     "executor": a.executor,
                     "has_photo": bool(a.photo_urls),
+                    "photo_url": first_photo,
+                    "photo_urls": a.photo_urls,
+                    "notes": getattr(a, 'notes', None),
                 }
             )
             activity_features.append(feat)
@@ -104,17 +126,25 @@ def get_project_map_layers(db: Session, project: Project) -> ProjectMapLayersRes
     tree_features = []
     for t in tree_records:
         if t.location_geojson and isinstance(t.location_geojson, dict):
+            first_photo = _extract_first_photo(t.photo_urls)
             feat = GeoJSONFeature(
                 type="Feature",
                 geometry=t.location_geojson,
                 properties={
                     "id": t.id,
                     "plot_id": t.plot_id,
+                    "tree_tag": t.tree_tag,
                     "species": t.species,
                     "quantity": t.quantity,
                     "planting_date": t.planting_date.isoformat() if t.planting_date else None,
                     "condition": t.condition,
                     "is_alive": t.is_alive,
+                    "height_cm": t.height_cm,
+                    "dbh_cm": t.dbh_cm,
+                    "photo_url": first_photo,
+                    "photo_urls": t.photo_urls,
+                    "notes": t.notes,
+                    "last_monitored": t.last_monitored.isoformat() if t.last_monitored else None,
                 }
             )
             tree_features.append(feat)
@@ -145,6 +175,7 @@ def get_project_map_layers(db: Session, project: Project) -> ProjectMapLayersRes
     report_features = []
     for fr in field_reports:
         if fr.location_geojson and isinstance(fr.location_geojson, dict):
+            first_photo = _extract_first_photo(fr.photo_urls)
             feat = GeoJSONFeature(
                 type="Feature",
                 geometry=fr.location_geojson,
@@ -156,6 +187,10 @@ def get_project_map_layers(db: Session, project: Project) -> ProjectMapLayersRes
                     "report_date": fr.report_date.isoformat() if fr.report_date else None,
                     "has_photos": bool(fr.photo_urls),
                     "has_videos": bool(fr.video_urls),
+                    "photo_url": first_photo,
+                    "photo_urls": fr.photo_urls,
+                    "video_urls": fr.video_urls,
+                    "notes": getattr(fr, 'notes', getattr(fr, 'description', None)),
                 }
             )
             report_features.append(feat)
@@ -177,6 +212,8 @@ def get_project_map_layers(db: Session, project: Project) -> ProjectMapLayersRes
                     "habitat": b.habitat,
                     "observer": b.observer,
                     "photo_url": b.photo_url,
+                    "photo_urls": [b.photo_url] if b.photo_url else [],
+                    "notes": getattr(b, 'notes', getattr(b, 'description', None)),
                 }
             )
             bio_features.append(feat)

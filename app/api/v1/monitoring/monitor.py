@@ -19,7 +19,7 @@ from app.schemas.monitor import (
     MonitoringPlotCreate, MonitoringPlotUpdate, MonitoringPlotResponse,
     TreeRecordCreate, TreeRecordUpdate, TreeRecordResponse, TreeSummary,
     TreeMeasurementCreate, TreeMeasurementResponse, TreeGrowthPoint, TreeGrowthResponse,
-    FieldReportCreate, FieldReportResponse,
+    FieldReportCreate, FieldReportResponse, MediaUploadResponse,
     AlertCreate, AlertUpdate, AlertResponse,
     BiodiversityCreate, BiodiversityResponse, BiodiversitySummary,
     CommunityCreate, CommunityResponse, CommunitySummary,
@@ -847,6 +847,81 @@ def get_field_report(
     return report
 
 
+@router.post("/{project_id}/media/upload", response_model=MediaUploadResponse)
+async def upload_media_file(
+    project_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Upload media bukti lapangan (foto atau video).
+    Mendukung format gambar (.jpg, .jpeg, .png, .webp) hingga 20MB
+    dan video (.mp4, .webm, .mov, .m4v) hingga 100MB.
+    """
+    require_field_officer(current_user)
+    get_project_or_404(project_id, db, current_user)
+
+    filename = file.filename or "media"
+    ext = os.path.splitext(filename)[1].lower()
+
+    allowed_images = {".jpg", ".jpeg", ".png", ".webp"}
+    allowed_videos = {".mp4", ".webm", ".mov", ".m4v"}
+
+    if ext in allowed_images:
+        media_type = "photo"
+        subdir = "photos"
+        max_size = 20 * 1024 * 1024  # 20 MB
+    elif ext in allowed_videos:
+        media_type = "video"
+        subdir = "videos"
+        max_size = 100 * 1024 * 1024  # 100 MB
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Format file '{ext}' tidak didukung. Harap unggah foto ({', '.join(allowed_images)}) atau video ({', '.join(allowed_videos)})."
+        )
+
+    upload_dir = os.path.join("static", "media", str(project_id), subdir)
+    os.makedirs(upload_dir, exist_ok=True)
+
+    unique_filename = f"{media_type}_{project_id}_{uuid.uuid4().hex[:12]}{ext}"
+    file_path = os.path.join(upload_dir, unique_filename)
+
+    file_bytes = await file.read()
+    file_size = len(file_bytes)
+
+    if file_size > max_size:
+        max_mb = max_size // (1024 * 1024)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ukuran file {file_size / (1024 * 1024):.1f}MB melebihi batas maksimal {max_mb}MB untuk {media_type}."
+        )
+
+    with open(file_path, "wb") as buffer:
+        buffer.write(file_bytes)
+
+    rel_url = f"/static/media/{project_id}/{subdir}/{unique_filename}".replace(os.sep, "/")
+
+    try:
+        from app.core.storage import upload_public_file
+        content_type = file.content_type or ("video/mp4" if media_type == "video" else "image/jpeg")
+        public_url = upload_public_file(f"media/{project_id}/{subdir}/{unique_filename}", file_bytes, content_type)
+        return MediaUploadResponse(
+            url=public_url,
+            filename=unique_filename,
+            media_type=media_type,
+            size=file_size
+        )
+    except Exception:
+        return MediaUploadResponse(
+            url=rel_url,
+            filename=unique_filename,
+            media_type=media_type,
+            size=file_size
+        )
+
+
 # ─────────────────────────────────────────────
 # EVIDENCE SYSTEM (Timeline & Map)
 # ─────────────────────────────────────────────
@@ -1099,6 +1174,10 @@ def create_biodiversity_observation(
     require_field_officer(current_user)
     get_project_or_404(project_id, db, current_user)
 
+    legacy_photo = body.photo_url
+    if not legacy_photo and body.photo_urls:
+        legacy_photo = body.photo_urls[0]
+
     obs = BiodiversityObservation(
         project_id=project_id,
         species_name=body.species_name,
@@ -1107,7 +1186,9 @@ def create_biodiversity_observation(
         observed_date=body.observed_date,
         habitat=body.habitat,
         observer=body.observer,
-        photo_url=body.photo_url,
+        photo_url=legacy_photo,
+        photo_urls=body.photo_urls or ([body.photo_url] if body.photo_url else None),
+        video_urls=body.video_urls,
         notes=body.notes,
     )
     db.add(obs)
@@ -1128,7 +1209,11 @@ def list_biodiversity_observations(
     query = db.query(BiodiversityObservation).filter(BiodiversityObservation.project_id == project_id)
     if species_type:
         query = query.filter(BiodiversityObservation.species_type == species_type)
-    return query.order_by(BiodiversityObservation.observed_date.desc()).all()
+    observations = query.order_by(BiodiversityObservation.observed_date.desc()).all()
+    for obs in observations:
+        if not obs.photo_urls and obs.photo_url:
+            obs.photo_urls = [obs.photo_url]
+    return observations
 
 
 @router.get("/{project_id}/biodiversity/summary", response_model=BiodiversitySummary)
@@ -1179,7 +1264,12 @@ def update_biodiversity_observation(
     obs.observed_date = body.observed_date
     obs.habitat = body.habitat
     obs.observer = body.observer
-    obs.photo_url = body.photo_url
+    obs.photo_urls = body.photo_urls or ([body.photo_url] if body.photo_url else obs.photo_urls)
+    obs.video_urls = body.video_urls
+    if body.photo_url:
+        obs.photo_url = body.photo_url
+    elif body.photo_urls:
+        obs.photo_url = body.photo_urls[0]
     obs.notes = body.notes
 
     db.commit()

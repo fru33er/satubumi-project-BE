@@ -60,3 +60,8 @@ class TopAuthorItem(BaseModel):
 class TopicItem(BaseModel):
     topic: str
     count: int
+
+
+class ArticleMediaUploadResponse(BaseModel):
+    url: str
+

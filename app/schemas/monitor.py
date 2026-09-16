@@ -294,6 +294,13 @@ class FieldReportResponse(BaseModel):
 
 
 # ─────────────────────────────────────────────
+class MediaUploadResponse(BaseModel):
+    url: str
+    filename: str
+    media_type: str  # "photo" | "video"
+    size: int
+
+
 # ALERT
 # ─────────────────────────────────────────────
 
@@ -345,7 +352,22 @@ class BiodiversityCreate(BaseModel):
     observed_date: date = Field(..., description="Tanggal observasi")
     habitat: Optional[str] = Field(None, max_length=255, description="Jenis habitat")
     observer: Optional[str] = Field(None, max_length=255, description="Nama observer")
-    photo_url: Optional[str] = Field(None, max_length=500, description="URL foto spesies")
+    photo_url: Optional[str] = Field(None, max_length=500, description="URL foto spesies (legacy)")
+    photo_urls: Optional[List[str]] = Field(None, description="URLs foto spesies")
+    video_urls: Optional[List[str]] = Field(None, description="URLs video spesies")
+    notes: Optional[str] = None
+
+
+class BiodiversityUpdate(BaseModel):
+    species_name: Optional[str] = Field(None, max_length=255, description="Nama spesies")
+    species_type: Optional[str] = Field(None, description="Tipe: fauna, flora")
+    location_geojson: Optional[Dict[str, Any]] = Field(None, description="Lokasi observasi (GeoJSON Point)")
+    observed_date: Optional[date] = Field(None, description="Tanggal observasi")
+    habitat: Optional[str] = Field(None, max_length=255, description="Jenis habitat")
+    observer: Optional[str] = Field(None, max_length=255, description="Nama observer")
+    photo_url: Optional[str] = Field(None, max_length=500, description="URL foto spesies (legacy)")
+    photo_urls: Optional[List[str]] = Field(None, description="URLs foto spesies")
+    video_urls: Optional[List[str]] = Field(None, description="URLs video spesies")
     notes: Optional[str] = None
 
 
@@ -359,6 +381,8 @@ class BiodiversityResponse(BaseModel):
     habitat: Optional[str] = None
     observer: Optional[str] = None
     photo_url: Optional[str] = None
+    photo_urls: Optional[List[str]] = None
+    video_urls: Optional[List[str]] = None
     notes: Optional[str] = None
     created_at: datetime
 
