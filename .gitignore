@@ -44,6 +44,10 @@ extracted_*.txt
 # Upload gambar artikel — abaikan file gambar, tapi track folder-nya
 # static/uploads/*
 # !static/uploads/.gitkeep
+static/media/
+static/trees/
+*.bak
+
 
 
 # IDE & Editors

@@ -251,6 +251,8 @@ class BiodiversityObservation(Base):
     habitat = Column(String(255), nullable=True)
     observer = Column(String(255), nullable=True)
     photo_url = Column(String(500), nullable=True)
+    photo_urls = Column(JSON, nullable=True)
+    video_urls = Column(JSON, nullable=True)
     notes = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
