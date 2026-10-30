@@ -95,13 +95,14 @@ def _delete_image_file(image_url: str) -> None:
 @router.get("/", response_model=list[ArticleResponse])
 async def get_articles(
     category: str | None = Query(
-        None, description="about | services | insight | home | ..."
+        None, description="about | services | insight | news | home | ..."
     ),
     topic: str | None = Query(
         None, description="carbon | esg | policy | nature | other"
     ),
     is_featured: bool | None = Query(None),
     author: str | None = Query(None),
+    slug: str | None = Query(None),
     lang: str = Query("id", description="id | en"),
     db: Session = Depends(get_db),
 ):
@@ -114,6 +115,8 @@ async def get_articles(
         query = query.filter(Article.is_featured == is_featured)
     if author:
         query = query.filter(Article.author == author)
+    if slug:
+        query = query.filter(Article.slug == slug)
 
     articles = query.order_by(Article.created_at.desc()).all()
     return [serialize_article(art, lang) for art in articles]
@@ -219,7 +222,7 @@ def increment_article_view(
     art = db.query(Article).filter(Article.id == article_id).first()
     if not art:
         raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
-    if art.category == "insight" and art.status == "published":
+    if art.category in ("insight", "news") and art.status == "published":
         art.view_count = int(getattr(art, "view_count", 0) or 0) + 1
         db.commit()
         db.refresh(art)
@@ -227,8 +230,20 @@ def increment_article_view(
 
 
 # ──────────────────────────────────────────────
-# DETAIL BY ID
+# DETAIL BY SLUG & ID
 # ──────────────────────────────────────────────
+
+
+@router.get("/by-slug/{slug}", response_model=ArticleResponse)
+async def get_article_by_slug(
+    slug: str,
+    lang: str = Query("id", description="id | en"),
+    db: Session = Depends(get_db),
+):
+    art = db.query(Article).filter(Article.slug == slug).first()
+    if not art:
+        raise HTTPException(status_code=404, detail="Artikel tidak ditemukan.")
+    return serialize_article(art, lang)
 
 
 @router.get("/{article_id}", response_model=ArticleResponse)
